@@ -1,0 +1,11 @@
+{
+  "target": "Vocabulary",
+  "returnProperties": ["@class", "@rid", "displayName"],
+  "queryType": "ancestors",
+  "neighbors": 1,
+  "filters": {
+    "name": "therapeutic efficacy"
+  },
+  "orderBy": ["@class", "displayName"],
+  "limit": 50
+}

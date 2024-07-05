@@ -1,0 +1,7 @@
+{
+    "target": "User",
+    "returnProperties": ["@rid", "name"],
+    "filters": {
+        "@rid": "#29:0"
+    }
+  }

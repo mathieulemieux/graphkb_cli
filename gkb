@@ -1,0 +1,455 @@
+#!/usr/bin/env bash
+set -e
+
+export GKB_WORKDIR=$(cd $(dirname $0) && pwd)
+export GKB_NAME_TO_PATH=${0##*/}
+export GKB_VERSION='0.1.0'
+
+api=''
+url=''
+password=$GKB_PASSWORD
+username=$(id -un)
+verbose=false
+
+
+# Help
+###############################
+
+gkb_help() {
+	echo "
+GraphKB CLI
+Version: $GKB_VERSION
+
+Usage: $GKB_NAME_TO_PATH [<help>|<options>] <command>|<crud> [...args]
+
+Help:
+	-e, --examples  Get general usage examples
+	                Or get command-specific examples with \$ $GKB_NAME_TO_PATH <command>|<crud> -e
+	                No command-specific examples available for schema, spec & version commands
+	-h, --help      Get root-level help
+	                Or get command-specific help with \$ $GKB_NAME_TO_PATH <command>|<crud> -h
+	-j, --jq        Get examples on how to pipe and process results with jq
+	-r, --readme    Shows README.md file. In Markdown
+	-v  --version   Get CLI version
+
+Options:
+	-a, --api       <value>  Set API server.
+	                         prod|staging|dev; default to dev
+	-g, --url       <value>  Set server URL directly, usually for local deployment
+	                         --api option gets ignored.
+	-p, --password  <value>  Set password used for auth, default to env variable \$GKB_PASSWORD
+	-u, --username  <value>  Set username used for auth, default to current user id \$(whoami)
+	-V, --verbose            Will log extra infos in console. Not suitable if piping into jq
+
+Commands:
+	e, extensions <service> <id>       Query external APIs via GraphKB. Auth NEEDED
+	p, parse      <hgvs>               Parse HGVS-like variant notation string into json
+	q, query      [class] [rid]        Fetch data from a target class or a subquery. Auth NEEDED
+	   schema                          Get schema defenition used by the API
+	   spec                            Get Swagger/OpenAPI API specifications
+	s, stats      [classes] [groupBy]  Get API statistics by classes. Auth NEEDED
+	v, version                         Get versions of the selected API and its main dependencies
+
+CRUD:
+	DELETE <class> <rid>  Delete a specific record on given class & RID. Auth NEEDED
+	GET    <class> <rid>  Get a specific record on given class & RID. Auth NEEDED
+	PATCH  <class> <rid>  Update a specific record on given class & RID. Auth NEEDED
+	POST   <class>        Create a new record on a given class. Auth NEEDED
+	"
+	exit $1
+}
+
+gkb_examples() {
+	echo "GraphKB CLI v$GKB_VERSION
+General usage examples
+
+Invoking help:
+
+	# Root-level help, examples or jq post-processing examples
+	\$ $GKB_NAME_TO_PATH --help
+	\$ $GKB_NAME_TO_PATH --examples
+	\$ $GKB_NAME_TO_PATH --jq
+
+	# Command-specific (e.g. query) help or examples.
+	# Works with Crud operations as well (e.g. GET)
+	\$ $GKB_NAME_TO_PATH query --help
+	\$ $GKB_NAME_TO_PATH GET --examples
+
+Invoking commands or Crud operations:
+
+	# Invoking a command (e.g. version)
+	\$ $GKB_NAME_TO_PATH version
+
+	# Invoking a command with args (e.g. parse, with hgvs-like variant notation)
+	\$ $GKB_NAME_TO_PATH parse 'TP53:c.123del'
+
+	# Invoking a crud operation with args (e.g. GET, with class User and RID #29:0)
+	\$ $GKB_NAME_TO_PATH GET User 29:0
+
+Setting options:
+
+	# Logging extra infos (API's url, and username when auth) in console. Not suitable if piping into jq
+	\$ $GKB_NAME_TO_PATH --verbose version
+
+	# Setting GraphKB API (e.g. prod). Default to dev if --api option is omitted
+	\$ $GKB_NAME_TO_PATH --api prod version
+
+	# Setting GraphKB API server URL (e.g. on localhost, port 8080). Will override --api option
+	\$ $GKB_NAME_TO_PATH --url 'localhost:8080/api' version
+
+	# Setting user name and/or password when auth is needed (e.g. with stats). Defaults are shown
+	\$ $GKB_NAME_TO_PATH --username \$(whoami) --password \$GKB_PASSWORD stats
+	"
+	exit 0
+}
+
+gkb_jq() {
+	echo "GraphKB CLI v$GKB_VERSION
+Post-processing output with 'jq' examples
+(All examples are given as data incomming to jq from piping (|) out of GraphKB CLI)
+
+Usage:
+	pattern: \$ $GKB_NAME_TO_PATH [...] | jq <jq expression>
+	example: \$ $GKB_NAME_TO_PATH query User | jq .result[].name
+
+Formatting
+\$ $GKB_NAME_TO_PATH query User | \\
+
+	# Evrething, formatted
+	jq .
+
+	# Evrething, formatted without whitespaces, tabs & linebreaks
+	jq -c .
+
+Metadata
+\$ $GKB_NAME_TO_PATH query User | \\
+
+	# Number of records returned
+	jq .metadata.records
+
+Result
+\$ $GKB_NAME_TO_PATH query User | \\
+
+	# All records
+	jq .result
+
+	# All records while escaping the list
+	jq .result[]
+
+	# One specific record by its list index (e.g. 7)
+	jq .result[7]
+
+	# Nested key (e.g. name) from all records
+	jq .result[].name
+
+	# Nested key (e.g. name) from a specific record by its list index (e.g. 7)
+	jq .result[7].name
+
+	# Escaping special characters in key name (e.g. @rid) by using doublequotes.
+	# jq expression MUST be inside singlequotes.
+	jq '.result[].\"@rid\"'
+
+Exploration
+\$ $GKB_NAME_TO_PATH spec | \\
+
+	# List of keys on a given object (e.g. root, paths or tags[0] objects); 1st level
+	jq '. | keys'
+	jq '.paths | keys'
+	jq '.tags[0] | keys'
+
+	# List of keys on a given object (e.g. .components); 1st & 2nd levels
+	# See how a jq expression can itself contains pipes. Same effect as piping from jq to jq
+	jq '.components | map_values(keys)'
+
+Creating arrays and objects
+\$ $GKB_NAME_TO_PATH query User | \\
+
+	# Array/list of user names
+	jq '[.result[].name]'
+
+	# Object of user names by their rids (pattern: {user.@rid: user.name})
+	jq '.result | map({(.\"@rid\"):.name}) | add'
+
+Filtering
+\$ $GKB_NAME_TO_PATH query User | \\
+
+	# Filtering an array of results based on value (e.g. importer) of a key (e.g. name)
+	jq '.result[] | select( .name | contains(\"importer\"))'
+
+Grouping
+
+	# Count number of Features per biotype (1st 1000 records)
+	\$ $GKB_NAME_TO_PATH query Feature | \\
+		jq '.result | group_by(.biotype) | map({(.[0].biotype):length}) | add'
+
+	# Count number of Sources per User who created them
+	\$ $GKB_NAME_TO_PATH query --body '{\"target\":\"Source\",\"neighbors\":1}' | \\
+		jq '.result | group_by(.createdBy) | map({(.[0].createdBy.name):length}) | add'
+
+Piping into 'sed' for further string manipulation
+\$ $GKB_NAME_TO_PATH query --history Vocabulary name patient | \\
+
+	# Results as a strignify list of RIDs (i.e. '[\"<rid>\",\"<rid>\",...]')
+	jq -c '[.result[].\"@rid\"]' | sed \"s/^/'/;s/$/'/\"
+
+	# Or same but reversing quotes (i.e. \"['<rid>','<rid>',...]\")
+	jq -c '[.result[].\"@rid\"]' | sed \"s/\\\"/'/g\" | sed 's/^/\"/;s/$/\"/'
+	"
+	exit 0
+}
+
+
+# Connection
+###############################
+
+gkb_select_api() {
+	case $1 in
+		production|prod|p)
+			apiName='production'
+			protocol='https'
+			domain='graphkb-api.bcgsc.ca'
+		;;
+		staging|s)
+			apiName='staging'
+			protocol='https'
+			domain='graphkbstaging-api.bcgsc.ca'
+		;;
+		*)
+			apiName='development'
+			protocol='https'
+			domain='graphkbdev-api.bcgsc.ca'
+		;;
+	esac
+
+	if [[ $2 == '' ]]; then
+		export GKB_BASE_URL=$(printf '%s://%s%s/api' $protocol $domain)
+	else
+		apiName='set by user'
+		if [[ ${2:$((${#2}-4))} == '/api' ]]; then
+			export GKB_BASE_URL=$2
+		else
+			export GKB_BASE_URL="$2/api"
+		fi
+	fi
+
+	if ($verbose)
+	then
+		echo "API URL set to $GKB_BASE_URL ($apiName)"
+	fi
+}
+
+gkb_token()
+{
+	if ($verbose)
+    then
+		echo "Acquiring new authentification token for user $1"
+    fi
+
+    printf -v data '{"password": "%s", "username": "%s"}' $2 $1
+    export GKB_TOKEN=$(
+        curl \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$data" \
+            --silent \
+			$GKB_BASE_URL/token | \
+        sed -n 's|.*"kbToken":"\([^"]*\)".*|\1|p'
+    )
+}
+
+
+# Options
+###############################
+# 0: key option
+# 1: key-value option
+# 2: return help
+
+gkb_cli_options()
+{
+	case $1 in
+		'-a'|'--api')
+			if [[ $2 != '' ]]; then
+				echo "1 api=$2"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-g'|'--url')
+			if [[ $2 != '' ]]; then
+				echo "1 url=$2"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-p'|'--pwd'|'--pass'|'--password')
+			if [[ $2 != '' ]]; then
+				echo "1 password=$2"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-u'|'--user'|'--username')
+			if [[ $2 != '' ]]; then
+				echo "1 username=$2"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-V'|'--Verbose'|'--verbose')
+			echo "0 verbose=true"
+		;;
+		*)
+			echo "2 $1"
+		;;
+	esac
+}
+
+
+# CLI Entry Point
+###########################
+
+# Extract options
+pos=1
+options=()
+for (( i=1; i <= "$#"; i++ )); do
+    if [[ ${!i:0:1} == "-" ]]; then
+
+        # Extract option
+        nextArg=$(($i+1))
+        IFS=' ' read -r -a option <<< $(gkb_cli_options ${!i} ${!nextArg})
+
+		if [[ ${option[0]} == "0" ]]; then
+			options+=(${option[1]})
+		elif [[ ${option[0]} == "1" ]]; then
+			options+=(${option[1]})
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
+		elif [[ ${option[0]} == "2" ]]; then
+			case ${option[1]} in
+				'-e'|'--example'|'--examples')
+					gkb_examples
+				;;
+				'-h'|'--help')
+					gkb_help 0
+				;;
+				'-j'|'--jq')
+					gkb_jq
+				;;
+				'-r'|'--readme')
+					echo -e 'GraphKB CLI README.md file\n'
+					cat $GKB_WORKDIR/README.md
+					exit 0
+				;;
+				'-v'|'--version'|'--versions')
+					echo $GKB_VERSION
+					exit 0
+				;;
+				*)
+					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with a value?"
+					gkb_help 1
+				;;
+			esac
+		fi
+
+    else
+		# Save position of 1st non-option argument & exit loop
+        pos=$i
+        break
+    fi
+	pos=$i
+done
+
+# Set option variables
+for (( i=0; i < ${#options[@]}; i++ )); do
+	# Carefull use of dynamic eval!
+	eval ${options[i]}
+done
+
+# Make sure $api is never an empty string
+if [[ $api == '' ]]; then
+	api='dev'
+fi
+
+# Select & run command
+case "${@:pos:1}" in
+
+	# COMMANDS #
+	'extensions'|'extension'|'ext'|'ex'|'e')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/extensions" "${@:pos+1}"
+	;;
+	'parse'|'p')
+		gkb_select_api $api $url
+		"$GKB_WORKDIR/commands/parse" "${@:pos+1}"
+	;;
+	'query'|'q')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/query" "${@:pos+1}"
+	;;
+    'schema'|'sc')
+		gkb_select_api $api $url
+        "$GKB_WORKDIR/commands/schema"
+    ;;
+    'spec'|'spec.json'|'sp')
+		gkb_select_api $api $url
+        "$GKB_WORKDIR/commands/spec"
+    ;;
+	'stats'|'st'|'s')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/stats" "${@:pos+1}"
+	;;
+	'versions'|'version'|'ver'|'v')
+		gkb_select_api $api $url
+		"$GKB_WORKDIR/commands/version"
+	;;
+
+	# CRUD #
+	'DELETE'|'Delete'|'delete'|'DEL'|'Del'|'del')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "DELETE" "${@:pos+1}"
+	;;
+	'GET'|'Get'|'get')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "GET" "${@:pos+1}"
+	;;
+	'PATCH'|'Patch'|'patch')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "PATCH" "${@:pos+1}"
+	;;
+	'POST'|'Post'|'post')
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "POST" "${@:pos+1}"
+	;;
+
+	# CRUD Aliases #
+	'CRUD'|'Crud'|'crud') # Default to GET
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "GET" "${@:pos+1}"
+	;;
+	'CREATE'|'Create'|'create') # Default to POST
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "POST" "${@:pos+1}"
+	;;
+	'READ'|'Read'|'read') # Default to GET
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "GET" "${@:pos+1}"
+	;;
+	'UPDATE'|'Update'|'update') # Default to PATCH
+		gkb_select_api $api $url
+		gkb_token $username $password
+		"$GKB_WORKDIR/commands/crud" "PATCH" "${@:pos+1}"
+	;;
+	*)
+		gkb_help 1
+	;;
+esac

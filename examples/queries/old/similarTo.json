@@ -1,0 +1,18 @@
+{
+  "queryType": "similarTo",
+  "returnProperties": [
+    "sourceId",
+    "sourceIdVersion",
+    "deprecated",
+    "name",
+    "@rid"
+  ],
+  "target": {
+    "filters": {
+      "name": "pancreatic cancer"
+    },
+    "queryType": "ancestors",
+    "target": "Disease"
+  },
+  "treeEdges": []
+}

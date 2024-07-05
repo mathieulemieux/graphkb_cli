@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+
+withoutFeatures=false
+
+
+# Help
+###########################
+
+gkb_parse_help() {
+	echo "GraphKB CLI v$GKB_VERSION
+Parse command help
+
+Command: parse
+Usage: gkb parse [help|options] <hgvs-like variant notation>
+
+Help:
+	-e, --examples         Get usage examples on the query command
+	-h, --help             Get help on the query command
+
+Options:
+	-w, --withoutFeatures  Allows for right-sided notation (without the feature side)
+	"
+	exit $1
+}
+
+gkb_parse_examples() {
+	echo "GraphKB CLI v$GKB_VERSION
+Parse command examples
+
+    # ...
+    $ $GKB_NAME_TO_PATH parse 'NP_123456:p.V123Y'
+
+    # Support for gene symbol
+	$ $GKB_NAME_TO_PATH parse
+
+
+	"
+	exit 0
+}
+
+
+# Parse
+###########################
+
+gkb_parse()
+{
+	printf -v data '{"content": "%s"}' $1
+	echo $(curl \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -d "$data" \
+        --silent \
+        $GKB_BASE_URL/parse
+    )
+}
+
+
+# Options
+###############################
+# 0: key option
+# 1: key-value option
+# 2: return help
+
+gkb_parse_options() {
+	case $1 in
+		'-w'|'--withoutFeatures')
+			if [[ $2 != '' ]]; then
+				echo "0 withoutFeatures=true"
+			fi
+		;;
+		*)
+			echo "2 $1"
+		;;
+	esac
+}
+
+
+# Command Entry Point
+###########################
+
+if [[ $1 == '' ]]; then
+	gkb_parse_help
+fi
+gkb_parse $1

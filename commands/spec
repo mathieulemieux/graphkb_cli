@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+
+# Help
+###########################
+
+gkb_spec_help() {
+	echo "
+Command: spec
+Usage: gkb spec
+	"
+	exit 1
+}
+
+
+# Spec
+###########################
+
+gkb_spec()
+{
+	echo $(curl \
+        -X GET \
+        -H "Content-Type: application/json" \
+        --silent \
+		$GKB_BASE_URL/spec.json
+    )
+}
+
+
+# Command Entry Point
+###########################
+gkb_spec

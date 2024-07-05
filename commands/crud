@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+
+method=$1
+neighbors=''
+filepath=''
+
+# Help
+###########################
+
+gkb_crud_help() {
+	echo "GraphKB CLI v$GKB_VERSION
+Crud commands help
+
+Command: DELETE|GET|PATCH|POST
+Usage: $GKB_NAME_TO_PATH [DELETE|GET|PATCH|POST] [options] <class> [rid]
+
+Help:
+	-e, --examples            Get Crud commands examples
+	-h, --help                Get help on Crud commands
+
+Options:
+	-b, --body      <value>   Passes the query's body as a strignify json.
+	                          Only with PATCH or POST
+	                          Value needs to be passed INSIDE singlequotes
+	-f, --file      <value>   Passes the query's body as a json file.
+	                          Only with PATCH or POST
+	-n, --neighbors <levels>  Extends embedded links to whole records for as many given levels
+	                          Only with GET
+
+CRUD commands avail.:
+(Auth NEEDED)
+
+	DELETE <class> <rid>  Delete a specific record on given class & RID
+	GET    <class> <rid>  Get a specific record on given class & RID
+	PATCH  <class> <rid>  Update a specific record on given class & RID
+	POST   <class>        Create a new record on a given class.
+	                      Body's target will be ignored if provided.
+	"
+	exit $1
+}
+
+gkb_crud_examples() {
+	echo "GraphKB CLI v$GKB_VERSION
+Crud commands Examples:
+
+DELETE
+
+	# Delete a specific active record on given class & RID.
+	\$ $GKB_NAME_TO_PATH DELETE Disease 133:0
+
+GET
+
+	# Get a specific record (active or soft-deleted) on given class & RID.
+	\$ $GKB_NAME_TO_PATH GET Disease 133:0
+
+	# Extends embedded links to whole records for as many given levels
+	\$ $GKB_NAME_TO_PATH GET --neighbors 1 Disease 133:0
+
+PATCH
+
+	# Update a specific active record on given class & RID.
+	# key-value pairs passed in the query's body will be updated.
+	\$ $GKB_NAME_TO_PATH PATCH --body '{\"comment\":\"new comment\"}' Disease 133:0
+
+POST
+
+	# Create a new record on a given class. Body's target will be ignored if provided
+	\$ $GKB_NAME_TO_PATH POST --file '$GKB_WORKDIR/examples/queries/PositionalVariant.json'
+	"
+	exit 0
+}
+
+
+# CRUD
+###########################
+
+gkb_crud()
+{
+	# body's data
+	if [[ $body != '' ]]; then
+		data=$body
+	elif [[ $filepath != '' ]]; then
+		data=`cat $filepath`
+		ech $data
+	else
+		data='{}'
+	fi
+
+	# class endpoint
+	if [[ $1 == '' ]]; then
+		gkb_crud_help 1
+	elif [[ $1 == 'E' || $1 == 'e' ]]; then
+		class='e'
+	elif [[ $1 == 'V' || $1 == 'v' ]]; then
+		class='v'
+	elif [[ "${1: -1}" == 's' ]]; then
+		class=$1
+	else
+		class="${1}s"
+	fi
+
+	# url w/ path variables
+	if [[ $2 != '' ]]; then
+		url="$GKB_BASE_URL/$class/$2"
+	else
+		url="$GKB_BASE_URL/$class"
+	fi
+
+	# url w/ query parameters
+	if [[ $neighbors != '' ]]; then
+		url="$url?neighbors=$neighbors"
+	fi
+
+	printf -v headerAuth 'Authorization: %s' $GKB_TOKEN
+
+	echo $(curl \
+		-X $method \
+		-H "Content-Type: application/json" \
+		-H "$headerAuth" \
+		-d "$data" \
+		--silent \
+		$url
+	)
+}
+
+
+# Options
+###############################
+# 1: key-value option
+# 2: return help
+
+gkb_crud_options()
+{
+	case $1 in
+		'-b'|'--body')
+			if [[ $2 != '' ]]; then
+				echo "1 body='$2'"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-f'|'--file')
+			if [[ $2 != '' ]]; then
+				echo "1 filepath='$2'"
+			else
+				echo "2 $1"
+			fi
+		;;
+		'-n'|'--neighbor'|'--neighbors')
+			if [[ $2 != '' ]]; then
+				echo "1 neighbors='$2'"
+			else
+				echo "2 $1"
+			fi
+		;;
+		*)
+			echo "2 $1"
+		;;
+	esac
+}
+
+
+# Command Entry Point
+###########################
+
+# Extract options
+pos=2
+options=()
+for (( i=2; i <= "$#"; i++ )); do
+	if [[ ${!i:0:1} == "-" ]]; then
+
+        # Extract option
+        nextArg=$(($i+1))
+        IFS=' ' read -r -a option <<< $(gkb_crud_options ${!i} ${!nextArg})
+		echo ${option[0]}
+		echo ${option[1]}
+
+		if [[ ${option[0]} == "1" ]]; then
+			echo 'inside'
+			options+=(${option[1]})
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
+		elif [[ ${option[0]} == "2" ]]; then
+			case ${option[1]} in
+				'-e'|'--example'|'--examples')
+					gkb_crud_examples
+				;;
+				'-h'|'--help')
+					gkb_crud_help 0
+				;;
+				*)
+					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with a value?"
+					gkb_crud_help 1
+				;;
+			esac
+		fi
+
+    else
+		# Save position of 1st non-option argument & exit loop
+        pos=$i
+        break
+    fi
+    pos=$i
+done
+
+# Set option variables
+for (( i=0; i < ${#options[@]}; i++ )); do
+	# Carefull use of dynamic eval!
+	eval ${options[i]}
+done
+
+# Run command
+if [[ $method == 'POST' && "${@:pos:1}" != '' ]]; then
+	echo ${@:pos}
+	echo $filepath
+	gkb_crud ${@:pos}
+elif [[ "${@:pos:1}" != '' && "${@:pos+1:1}" != '' ]]; then
+	gkb_crud ${@:pos}
+else
+	gkb_crud_help 1
+fi

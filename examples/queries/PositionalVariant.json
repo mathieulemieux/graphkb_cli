@@ -1,0 +1,11 @@
+{
+    "type": "#145:43",
+    "reference1": "#128:30410",
+    "break1Start": {
+        "@class": "ProteinPosition",
+        "pos": "702",
+        "refAA": "H"
+    },
+    "refSeq": "H",
+    "untemplatedSeq": "X"
+}

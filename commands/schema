@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+
+# Help
+###########################
+
+gkb_schema_help() {
+	echo "
+Command: schema
+Usage: gkb schema
+	"
+	exit 1
+}
+
+
+# Schema
+###########################
+
+gkb_schema()
+{
+	echo $(curl \
+        -X GET \
+        --header "Content-Type: application/json" \
+        --silent \
+		$GKB_BASE_URL/schema
+    )
+}
+
+
+# Command Entry Point
+###########################
+gkb_schema

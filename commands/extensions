@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+
+service=''
+
+# Help
+###########################
+
+gkb_extensions_help() {
+	echo "
+Command: extensions
+
+Usage: $GKB_NAME_TO_PATH extensions [options] <service> <id>
+
+Options:
+	-h, --help          Get help on the extensions command
+
+Avail. services:
+	clinicaltrialsgov   <id>  Given a trial id, query the clinicaltrials.gov API
+	                          \$ $GKB_NAME_TO_PATH extensions clinicaltrialsgov NCT03478891
+
+	gene                <id>  Given a gene id, query the Gene database of the NCBI's Entrez API
+	                          \$ $GKB_NAME_TO_PATH extensions gene 1956
+
+	pubmed              <id>  Given a Pubmed id, query the Pubmed database of the NCBI's Entrez API
+	                          \$ $GKB_NAME_TO_PATH extensions pubmed 28244479
+	"
+	exit $1
+}
+
+
+# Query
+###########################
+
+gkb_extensions()
+{
+	if [[ $2 == '' ]]; then
+		echo 'A record id to query for must be provided as last positional argument.'
+		gkb_extensions_help 1
+	fi
+
+	case $1 in
+		'clinicaltrialsgov'|'clinicaltrials'|'clinicaltrial'|'c')
+			service='clinicaltrialsgov'
+		;;
+		'gene'|'genes'|'g')
+			service='gene'
+		;;
+		'pubmed'|'p')
+			service='pubmed'
+		;;
+		*)
+			echo "$1 is not a supported service."
+			gkb_extensions_help 1
+		;;
+	esac
+
+	printf -v headerAuth 'Authorization: %s' $GKB_TOKEN
+	echo $(curl \
+        -X GET \
+        -H "Content-Type: application/json" \
+		-H "$headerAuth" \
+        --silent \
+		$GKB_BASE_URL/extensions/$service/$2
+    )
+}
+
+
+# Options
+###############################
+# 1: key-value option
+# 2: return help
+
+gkb_extensions_options()
+{
+	case $1 in
+		*)
+			echo "2 $1"
+		;;
+	esac
+}
+
+
+# Command Entry Point
+###########################
+
+# Extract options
+pos=1
+options=()
+for (( i=1; i <= "$#"; i++ )); do
+    if [[ ${!i:0:1} == "-" ]]; then
+
+        # Extract option
+        nextArg=$(($i+1))
+        IFS=' ' read -r -a option <<< $(gkb_extensions_options ${!i} ${!nextArg})
+
+		if [[ ${option[0]} == "1" ]]; then
+			options+=(${option[1]})
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
+		else
+			if [[ ${option[1]} != '-h' ]] && [[ ${option[1]} != '--help' ]]; then
+				echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with a value?"
+				gkb_extensions_help 1
+			fi
+			gkb_extensions_help 0
+		fi
+
+    else
+		# Save position of 1st non-option argument & exit loop
+        pos=$i
+        break
+    fi
+    pos=$i
+done
+
+# Set option variables
+for (( i=0; i < ${#options[@]}; i++ )); do
+	# Carefull use of dynamic eval!
+	eval ${options[i]}
+done
+
+# Run command
+if [[ $1 != '' ]]; then
+	gkb_extensions ${@:pos}
+else
+	gkb_extensions_help 1
+fi
