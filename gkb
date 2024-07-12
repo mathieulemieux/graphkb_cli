@@ -245,7 +245,7 @@ gkb_token()
 		echo "Acquiring new authentification token for user $1"
     fi
 
-    printf -v data '{"password": "%s", "username": "%s"}' $2 $1
+    printf -v data '{"username":"%s","password":"%s"}' $1 $2
     export GKB_TOKEN=$(
         curl \
             -X POST \

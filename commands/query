@@ -23,14 +23,15 @@ Options:
 	-H, --history                 Includes soft-deleted records
 	-l, --limit    <value>        Limit of records returned per API call. Default and maxed out at 1000
 	-m, --max      <value>        Set the maximum total number of records to be returned
-	-p, --paginate                Implementing pagination. REQUIRES 'jq' installed and accessible on PATH
+	-p, --paginate                Implementing pagination.
 	                              Concatenate query results until max value is reached or all records are returned
 	-s, --skip     <value>        Number of records to be skipped before returning the following ones.
 
 Overrides:
-	-F, --filter   <condition>    Add and/or override any conditions in filters. REQUIRES 'jq'.
-	-O, --or                      Set/override filters' clause type as 'OR'; default is 'AND'. REQUIRES 'jq'
-	-X, --override <key> <value>  Add and/or override any key-value in the query's body. REQUIRES 'jq'
+	-F, --filter   <condition>    Add and/or override any conditions in filters.
+	                              Condition can be a key-value pair or an object
+	-O, --or                      Set/override filters' clause type as 'OR'; default is 'AND'.
+	-X, --override <key> <value>  Add and/or override any key-value in the query's body.
 	                              Condition can be an object or a name-value pair.
 	"
 	exit $1
@@ -74,7 +75,6 @@ Limits & pagination
 	\$ $GKB_NAME_TO_PATH query --file '$GKB_WORKDIR/examples/queries/User.json'
 
 Overrides
-(all overrides requires jq)
 
 	# Add or override one or more query parameters
 	# If the parameter already exists in the request's body, it will be overrided.
@@ -130,37 +130,55 @@ gkb_query_fixed_examples() {
 Query command fixed subqueries examples
 (all examples are given using body element overrides)
 
-queryType = ancestors|descendants|edge|keyword|neighborhood|similarTo
+queryType =
+	ancestors|descendants|edge|keyword|neighborhood|similarTo
 
 
 ancestors
+\$ $GKB_NAME_TO_PATH query -X queryType ancestors \\
 
-	#
-	\$ $GKB_NAME_TO_PATH query \\
-	    -X queryType ancestors \\
-	    -X vertexFilter '["147:0","147:1"]' \\
-	    -X direction both \\
-	    E
+	# Returns VERTICES
+	# Traverse the tree on hierarchy-type edges (e.g. SubClassOf, ElementOf, etc.) for children nodes
+	# Edges are followed in the out-in direction
 
 descendants
+\$ $GKB_NAME_TO_PATH query -X queryType descendants \\
 
+	# Returns VERTICES
+	# Traverse the tree on hierarchy-type edges (e.g. SubClassOf, ElementOf, etc.) for parent nodes
+	# Edges are followed in the in-out direction
 
 edge
+\$ $GKB_NAME_TO_PATH query -X queryType edge \\
 
+	# Returns EDGES
 	# Specify which vertices to get edges from/to with vertexFilter
-	# Specify a direction (in|out|both)
-	# Target one specific edge class or target them all with parent class 'E'.
-	\$ $GKB_NAME_TO_PATH query \\
-	    -X queryType edge \\
-	    -X vertexFilter '[\"147:0\",\"147:1\"]' \\
-	    -X direction both \\
-	    E
+	# Specify a direction (in|out|both); default to both
+	# Target one specific edge class (e.g. SubClassOf) or target them all with parent class 'E'.
+	-X vertexFilter '[\"147:0\",\"147:1\"]' \\
+	-X direction both \\
+	SubClassOf
 
 keyword
+\$ $GKB_NAME_TO_PATH query -X queryType keyword \\
+
+	# Returns EDGES and/or VERTICES
+	#
+
+	# example with gene-drug interactions, interactionTypes field
 
 neighborhood
+\$ $GKB_NAME_TO_PATH query -X queryType neighborhood \\
+
+	# Returns VERTICES
+	#
 
 similarTo
+\$ $GKB_NAME_TO_PATH query -X queryType similarTo \\
+
+	# Returns VERTICES
+	# Traverse the tree on similarity-type edges (e.g. AliasOf, DeprecatedBy, CrossReferenceOf, etc.)
+	# Edges are always followed on both directions
 
 	"
 	exit 0
@@ -172,7 +190,7 @@ similarTo
 # Raw options
 body=''
 filepath=''
-history=''
+history=false
 limit=''
 max=''
 paginate=false
@@ -212,9 +230,9 @@ gkb_query_ammend_filter() {
 	fi
 }
 
-gkb_query_ammend() {
-	if [[ $2 =~ ^-?[0-9]+$ || ${2:0:1} == '[' ]]; then
-		# value is a number or an array
+gkb_query_ammend_body() {
+	if [[ $2 =~ ^-?[0-9]+$ || ${2:0:1} == '[' || ${2:0:1} == '{' ]]; then
+		# value is a number, an array or an object
 		formattedData=$(echo $formattedData | jq -c ".$1 |= $2")
 	else
 		# value is a string
@@ -237,17 +255,15 @@ gkb_query() {
 		firstArg="\"$1\""
 	fi
 
-	# Cheak for 2nd argument as either filter name or RID value and format accordingly
+	# Cheak for 2nd argument as either filter name or RID value; format accordingly
 	if [[ $2 != '' && $3 != '' ]]; then
 		secondArg=$2 # As filter name
 	elif [[ $2 != '' ]]; then
 		secondArg=$2 # As filter value
-	else
-		secondArg=''
 	fi
 
 	# Check for 3rd argument as filter value.
-	# If the result of a subquery (e.g. an RID or an array of RIDs) then format accordingly
+	# If the result of a subquery (e.g. an RID or an array of RIDs), format accordingly
 	if [[ $3 != '' ]]; then
 		if [[ ${3:0:1} == '[' ]];then
 			thirdArg=$3
@@ -261,44 +277,45 @@ gkb_query() {
 	fi
 
 	###
-	# PROCESSING BODY/FILE OPTIONS
+	# PROCESSING --body & --file OPTIONS
 
 	if [[ $body != '' ]]; then
-		data=$body
+		formattedData=$body
 		# TODO: when there is still positional args
 	elif [[ $filepath != '' ]]; then
-		data=`cat $filepath`
+		formattedData=`cat $filepath`
 		# TODO: when there is still positional args
 	elif [[ $secondArg && $thirdArg ]]; then
-		printf -v data '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
+		# Pattern for a given target and a key-value filter
+		printf -v formattedData '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
 	elif [[ $secondArg ]]; then
-		printf -v data '{"target":%s,"filters":{"AND":[{"@rid":"%s"}]}}' $firstArg $secondArg
+		# Pattern for a given target and an RID filter
+		printf -v formattedData '{"target":%s,"filters":{"AND":[{"@rid":"%s"}]}}' $firstArg $secondArg
 	else
-		printf -v data '{"target":%s}' $firstArg
+		# Pattern for a given target only; no positional filter
+		printf -v formattedData '{"target":%s}' $firstArg
 	fi
-	# Removes trailing whitespaces
-	formattedData="$(echo -e "${data}" | sed -e 's/[[:space:]]*$//')"
+
+	# Removes trailing whitespaces, if any
+	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
 
 	###
-	# PROCESSING GENERAL OVERRIDE OPTIONS
+	# AMMENDING QUERY BODY WITH --override
 
-	# Ammend query with history
-	if [[ $history != '' ]];then
-		formattedData="${formattedData::-1},\"history\":$history}"
-	fi
-	# Ammend query with limit & skip
-	formattedData="${formattedData::-1},\"limit\":$actualLimit}"
-	formattedData="${formattedData::-1},\"skip\":$actualSkip}"
+	# Ammend query body with --history, --limit & --skip
+	gkb_query_ammend_body 'history' $history
+	gkb_query_ammend_body 'limit' $actualLimit
+	gkb_query_ammend_body 'skip' $actualSkip
 
-	# Processing overrides
+	# Ammend query body with other optional overrides (--override)
 	for (( i=0; i < ${#overrides[@]}; i++ )); do
-		gkb_query_ammend ${overrides[i]}
+		gkb_query_ammend_body ${overrides[i]}
 	done
 
 	###
-	# PROCESSING FILTER OVERRIDE OPTIONS
+	# AMMENDING QUERY BODY FILTERS WITH OVERRIDES
 
-	# Processing filter overrides
+	# Processing optional filter overrides
 	for (( i=0; i < ${#filters[@]}; i++ )); do
 		gkb_query_ammend_filter ${filters[i]}
 	done
@@ -306,12 +323,14 @@ gkb_query() {
 	# Adding filters to query
 	currentFilters=$(echo $formattedData | jq -c .filters)
 	if [[ $currentFilters == 'null' ]]; then
+		# Without initial filters
 		if [[ $formattedFilters != '[]' ]]; then
-			# If no filters but some filter overrides
+			# Without initial filters but with some filter overrides
 			formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
 		fi
 		# If no filters and no override for filters, do nothing
 	else
+		# With filter
 		if [[ ${currentFilters:0:7} == '{"AND":' ]]; then
 			# filters is an array of objects with explicit 'AND' clause
 			formattedData=$(echo $formattedData | jq -c ".filters.AND += $formattedFilters")
@@ -322,34 +341,16 @@ gkb_query() {
 			# filters is a single object
 			formattedData=$(echo $formattedData | jq -c ".filters = {\"$clauseType\":[$currentFilters]}")
 			if [[ $formattedFilters != '[]' ]]; then
+				# If some overrides, add them to filters
 				formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
 			fi
 
-			# echo '--'
-			# echo $formattedData
-			# echo $formattedFilters
-			# echo '---'
-			# zz=$(echo $formattedData | jq -c ".filters = {\"AND\":$formattedFilters}")
-			# echo $zz
-
 			# formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
 		# else
-			# filters is an array of objects, with implicit 'AND' clause
+			# filters is an array of objects, without clause (implicit 'AND')
 
 		fi
 	fi
-
-	echo $formattedData
-
-	# # Adding filters to body
-	# echo $formattedData
-	# echo $formattedFilters
-
-	# if [[ $formattedFilters != '[]' ]]; then
-	# 	# formattedData=$(echo $formattedData | jq -c ".filters |= {\"$clauseType\":$formattedFilters}")
-	# 	formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
-	# fi
-	# echo $formattedData
 
 	###
 	# ACTUAL QUERY
@@ -433,7 +434,7 @@ gkb_query_preprocessing() {
 		fi
 
 	done
-	echo "{\"metadata\":{\"records\":$totalRecords},\"result\":$results}"
+	# echo "{\"metadata\":{\"records\":$totalRecords},\"result\":$results}"
 }
 
 
@@ -441,7 +442,7 @@ gkb_query_preprocessing() {
 ###############################
 # 0: key option
 # 1: key-value option
-# 2: key-key_value option; e.g. -X orderBy name
+# 2: key-key_value option; e.g. -X orderBy name; e.g. -F name graphkb_importer
 # 3: return help or examples
 
 gkb_query_options() {
