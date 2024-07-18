@@ -28,8 +28,7 @@ Options:
 	-s, --skip     <value>        Number of records to be skipped before returning the following ones.
 
 Overrides:
-	-F, --filter   <condition>    Add and/or override any conditions in filters.
-	                              Condition can be a key-value pair or an object
+	-F, --filter   <key> <value>  Add and/or override any conditions in filters
 	-O, --or                      Set/override filters' clause type as 'OR'; default is 'AND'.
 	-X, --override <key> <value>  Add and/or override any key-value in the query's body.
 	                              Condition can be an object or a name-value pair.
@@ -313,24 +312,25 @@ gkb_query() {
 	done
 
 	###
-	# AMMENDING QUERY BODY FILTERS WITH OVERRIDES
+	# FILTERS
 
-	# Processing optional filter overrides
+	# Preprocessing filter overrides
 	for (( i=0; i < ${#filters[@]}; i++ )); do
 		gkb_query_ammend_filter ${filters[i]}
 	done
 
-	# Adding filters to query
+	# Adding filter overrides to query, alongside already existing filters if any.
+	# Also setting explicitly the filter clause type; default to 'AND'
 	currentFilters=$(echo $formattedData | jq -c .filters)
 	if [[ $currentFilters == 'null' ]]; then
 		# Without initial filters
 		if [[ $formattedFilters != '[]' ]]; then
-			# Without initial filters but with some filter overrides
+			# With some filter overrides
 			formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
 		fi
 		# If no filters and no override for filters, do nothing
 	else
-		# With filter
+		# With initial filter
 		if [[ ${currentFilters:0:7} == '{"AND":' ]]; then
 			# filters is an array of objects with explicit 'AND' clause
 			formattedData=$(echo $formattedData | jq -c ".filters.AND += $formattedFilters")
@@ -344,11 +344,15 @@ gkb_query() {
 				# If some overrides, add them to filters
 				formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
 			fi
-
-			# formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
-		# else
-			# filters is an array of objects, without clause (implicit 'AND')
-
+			# If no override, do nothing more
+		else
+			# filters is an array of objects, without explicit clause (implicit 'AND')
+			formattedData=$(echo $formattedData | jq -c ".filters = {\"$clauseType\":$currentFilters}")
+			if [[ $formattedFilters != '[]' ]]; then
+				# If some overrides, add them to filters
+				formattedData=$(echo $formattedData | jq -c ".filters.$clauseType += $formattedFilters")
+			fi
+			# If no override, do nothing more
 		fi
 	fi
 
