@@ -1,0 +1,4 @@
+# Note that result from GET is an object, not a list
+
+gkb GET CategoryVariant 161:0 | \
+    jq .result.displayName

@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-withoutFeatures=false
-
-
 # Help
 ###########################
 
@@ -14,8 +11,8 @@ Command: parse
 Usage: gkb parse [help|options] <hgvs-like variant notation>
 
 Help:
-	-e, --examples         Get usage examples on the query command
-	-h, --help             Get help on the query command
+	-e, --examples  Get usage examples on the query command
+	-h, --help      Get help on the query command
 
 Options:
 	-w, --withoutFeatures  Allows for right-sided notation (without the feature side)
@@ -27,16 +24,34 @@ gkb_parse_examples() {
 	echo "GraphKB CLI v$GKB_VERSION
 Parse command examples
 
-    # ...
-    $ $GKB_NAME_TO_PATH parse 'NP_123456:p.V123Y'
+	# Parse variant notation into object
+	# Use singlequotes if notation contains special caracters like '>, (, )'
+	  $ $GKB_NAME_TO_PATH parse NP_123456:p.V123Y
+	  $ $GKB_NAME_TO_PATH parse 'NG_007726.3:g.123A>C'
 
-    # Support for gene symbol
-	$ $GKB_NAME_TO_PATH parse
+	# Support for gene symbol (e.g. AXL2) as reference
+	  $ $GKB_NAME_TO_PATH parse AXL2:p.V123Y
 
+	# Support uncertainties on positions with range (_) and/or '?'.
+	  $ $GKB_NAME_TO_PATH parse BRAF:c.0_123del
+	  $ $GKB_NAME_TO_PATH parse BRAF:c.?del
+	  $ $GKB_NAME_TO_PATH parse BRAF:c.?_123del
+
+	# Support for right side only parsing, with the --withoutFeatures flag
+	  $ $GKB_NAME_TO_PATH parse -w p.V123Y
+
+	# Gene fusion with old nomenclature
+	  $ $GKB_NAME_TO_PATH parse (ATP1B1,NRG1):fusion(g.169080736,g.32453346)
+
+	# Gene fusion with new nomenclature (::)
+	  $ $GKB_NAME_TO_PATH parse 'COL1A1:r.?_2354::PDGFB:r.852_?'
 
 	"
 	exit 0
 }
+
+# Globals
+withoutFeatures=false
 
 
 # Parse
@@ -44,7 +59,14 @@ Parse command examples
 
 gkb_parse()
 {
-	printf -v data '{"content": "%s"}' $1
+	# Inverting withoutFeatures to requireFeatures
+	if [[ $withoutFeatures ]]; then
+		requireFeatures=false
+	else
+		requireFeatures=true
+	fi
+
+	printf -v data '{"content":"%s","requireFeatures":%s}' $1 $requireFeatures
 	echo $(curl \
         -X POST \
         -H "Content-Type: application/json" \
@@ -64,9 +86,7 @@ gkb_parse()
 gkb_parse_options() {
 	case $1 in
 		'-w'|'--withoutFeatures')
-			if [[ $2 != '' ]]; then
-				echo "0 withoutFeatures=true"
-			fi
+			echo "0 withoutFeatures=true"
 		;;
 		*)
 			echo "2 $1"
@@ -78,7 +98,53 @@ gkb_parse_options() {
 # Command Entry Point
 ###########################
 
-if [[ $1 == '' ]]; then
-	gkb_parse_help
+# Extract options
+pos=1
+options=()
+for (( i=1; i <= "$#"; i++ )); do
+    if [[ ${!i:0:1} == "-" ]]; then
+
+        # Extract option
+        nextArg=$(($i+1))
+        IFS=' ' read -r -a option <<< $(gkb_parse_options ${!i} ${!nextArg})
+
+		if [[ ${option[0]} == "0" ]]; then
+			options+=(${option[1]})
+		elif [[ ${option[0]} == "1" ]]; then
+			options+=(${option[1]})
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
+		else
+			case ${option[1]} in
+				'-e'|'--examples')
+					gkb_parse_examples
+				;;
+				'-h'|'--help')
+					gkb_parse_help 0
+				;;
+				*)
+					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with one or more value(s)?"
+					gkb_parse_help 1
+				;;
+			esac
+		fi
+    else
+		# Save position of 1st non-option argument & exit loop
+        pos=$i
+        break
+    fi
+    pos=$i
+done
+
+# Set option variables
+for (( i=0; i < ${#options[@]}; i++ )); do
+	# Carefull use of dynamic eval!
+	eval ${options[i]}
+done
+
+# Run command
+if [[ ${@:pos:1} != '' ]]; then
+	gkb_parse ${@:pos:1}
+else
+	gkb_parse_help 1
 fi
-gkb_parse $1

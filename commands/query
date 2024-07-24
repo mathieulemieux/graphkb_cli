@@ -11,27 +11,34 @@ Command: query
 Usage: $GKB_NAME_TO_PATH query [help|options|overrides] [target] [RID|<key> <value>]
 
 Help:
-	-e, --examples                Get usage examples on the query command
-	    --fixed                   Get specific examples about fixed subqueries
-	-h, --help                    Get help on the query command
+	-e, --examples   Get usage examples on the query command, including the use of subqueries
+	    --fixed      Get specific examples about fixed subqueries
+	-h, --help       Get help on the query command
+	-o, --operators  Get specific examples about filter operators
 
 Options:
-	-b, --body     <value>        Pass the query's body as a strignify json. Following args are ignored
-	                              Value needs to be passed INSIDE singlequotes.
-	-f, --file     <value>        Pass the query's body as a json file. Following args are ignored
-	                              Following args are ignored
-	-H, --history                 Includes soft-deleted records
-	-l, --limit    <value>        Limit of records returned per API call. Default and maxed out at 1000
-	-m, --max      <value>        Set the maximum total number of records to be returned
-	-p, --paginate                Implementing pagination.
-	                              Concatenate query results until max value is reached or all records are returned
-	-s, --skip     <value>        Number of records to be skipped before returning the following ones.
+	-b, --body <value>   Pass the query's body as a strignify json. Following positional args are ignored
+	                     Value needs to be passed INSIDE singlequotes.
+	-f, --file <value>   Pass the query's body as a json file. Following positional args are ignored.
+	                     Specific conternt can be overridden by all the other options
+	-H, --history        Includes soft-deleted records
+	-l, --limit <value>  Limit of records returned per API call. Default and maxed out at 1000
+	-m, --max <value>    Set the maximum total number of records to be returned
+	-p, --paginate       Implementing pagination.
+	                     Concatenate query results until max value is reached or all records are returned
+	-s, --skip <value>   Number of records to be skipped before returning the following ones.
 
 Overrides:
-	-F, --filter   <key> <value>  Add and/or override any conditions in filters
-	-O, --or                      Set/override filters' clause type as 'OR'; default is 'AND'.
-	-X, --override <key> <value>  Add and/or override any key-value in the query's body.
-	                              Condition can be an object or a name-value pair.
+	-A, --allFilters <object>        Override the filters object as a whole.
+	                                 Object needs to be INSIDE singlequotes.
+	-F, --filter <key> <op> <value>  Add or override any conditions in filters as key-operator-value.
+	                                 See '\$ $GKB_NAME_TO_PATH query -o' for help on operators.
+	-O, --or                         Set/override filters' clause type as 'OR'; default is 'AND'.
+	-X, --override <key> <value>     Add or override any key-value in the query's body.
+
+Target:
+	Mandatory unless given otherwise (via --body, --file or --override).
+	Can be a class, an RID, an array of RIDs or a subquery.
 	"
 	exit $1
 }
@@ -42,84 +49,89 @@ Query command examples
 
 Getting records
 
-	# Get all active records from a given class (e.g. Therapy). Default and maxed out at 1000
-	\$ $GKB_NAME_TO_PATH query Therapy
+	# Querying for one or more RID(s)
+	  \$ $GKB_NAME_TO_PATH query 37:17
+	  \$ $GKB_NAME_TO_PATH query '#37:17'
+	  \$ $GKB_NAME_TO_PATH query '[\"#37:17\",\"#38:1\"]'
 
-	# Include soft-deleted records in the results
-	\$ $GKB_NAME_TO_PATH query --history Therapy
+	# Get all active records from a given class (e.g. Therapy).
+	# Number of returned records defaulted and maxed out at 1000.
+	# See 'Limits & pagination' down below for more control over record limits
+	  \$ $GKB_NAME_TO_PATH query Therapy
 
-	# Get a specific record, given a class (e.g. User) and an rid (e.g. 29:0)
-	\$ $GKB_NAME_TO_PATH query User 29:0
+	# Include soft-deleted records in the results with --history
+	  \$ $GKB_NAME_TO_PATH query --history Therapy
 
-	# Get a specific record given only the rid. See subqueries down below for more details.
-	\$ $GKB_NAME_TO_PATH query 29:0
+	# Get a specific record, given a class and an rid (e.g. User & #29:0)
+	  \$ $GKB_NAME_TO_PATH query User 29:0
+	  \$ $GKB_NAME_TO_PATH query User '#29:0'
+
+	# For an array of RIDs within a specific class, use the --filter override
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter '@rid' IN '[\"#29:0\",\"#29:1\"]' \\
+	    User
+
+Query's body as json
+
+	# Pass a query body as in-line argunent. Must be inside singlequotes.
+	  \$ $GKB_NAME_TO_PATH query --body '{\"target\":\"User\",\"filters\":{\"@rid\":\"#29:0\"}}'
+
+	# Pass a query body from a file
+	  \$ $GKB_NAME_TO_PATH query --file '$GKB_WORKDIR/examples/queries/User.json'
 
 Limits & pagination
 
-	# Get a subset of record (e.g. limited at 10) starting at 1 (implicit)
-	\$ $GKB_NAME_TO_PATH query --limit 10 Therapy
+	# Get a subset of record starting at 1 (implicit), e.g. limited at 10
+	  \$ $GKB_NAME_TO_PATH query --limit 10 Therapy
 
-	# Get a subset of record (e.g. limited at 10, skipping first 20)
-	\$ $GKB_NAME_TO_PATH query --skip 20 --limit 10 Therapy
+	# Get a subset of record skipping some, e.g. first 20
+	  \$ $GKB_NAME_TO_PATH query --skip 20 --limit 10 Therapy
 
 	# Use pagination to get concatenated results from multiple queries. Used to overcome records limit.
-	# Will return all records by default, unless a maximum number of record to be returned is given
-	\$ $GKB_NAME_TO_PATH query --paginate Therapy
-	\$ $GKB_NAME_TO_PATH query --paginate --max 2500 Therapy
-
-	# Pass a query body as in-line argunent
-	\$ $GKB_NAME_TO_PATH query --body '{\"target\":\"User\",\"filters\":{\"@rid\":\"#29:0\"}}'
-
-	# Pass a query body from a file
-	\$ $GKB_NAME_TO_PATH query --file '$GKB_WORKDIR/examples/queries/User.json'
+	# Will return all records by default, unless a maximum number of record to be returned is given (e.g. 2500)
+	  \$ $GKB_NAME_TO_PATH query --paginate Therapy
+	  \$ $GKB_NAME_TO_PATH query --paginate --max 2500 Therapy
+	  \$ $GKB_NAME_TO_PATH query --paginate --max 2500 --limit 100 Therapy
 
 Overrides
 
 	# Add or override one or more query parameters
 	# If the parameter already exists in the request's body, it will be overrided.
 	# Otherwise, it will be added
-	\$ $GKB_NAME_TO_PATH query \\
-		--override orderBy name \\
-		--override orderByDirection DESC \\
-		User
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --override orderBy name \\
+	    --override orderByDirection DESC \\
+	    User
 
 	# Add or override one or more filters, shown here as 'OR' conditions
 	# If the filter already exists, it will be overrided. Otherwise, it will be added.
-	\$ $GKB_NAME_TO_PATH query \\
-		--filter name graphkb_importer \\
-		--filter name ipr_service \\
-		--or \\
-		User
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter name graphkb_importer \\
+	    --filter name ipr_service \\
+	    --or \\
+	    User
 
-	# Filter can also be an object, shown here as 'AND' conditions (no explicit --or option).
-	# Allows for more complex filtering scenarios.
-	\$ $GKB_NAME_TO_PATH query \\
-		--filter '{}' \\
-		--filter '{}' \\
-		User
+	# The filters object can also be added/overridden as a whole.
+	# Allows for more complex scenarios
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filters '{}' \\
+	    User
 
 Subqueries
 
-	# Querying any given RID(s) without having to specify a class
-	# Or when the target is the result of a subquery;
-	# in the shape of an RID or a list of RIDs (i.e. '[\"<rid>\",\"<rid>\",...]')
-	\$ $GKB_NAME_TO_PATH query 37:17
-	\$ $GKB_NAME_TO_PATH query '#37:17'
-	\$ $GKB_NAME_TO_PATH query '[\"#37:17\",\"#38:1\"]'
-
 	# When the value of one of the filters is itself a query (i.e. '{\"target\":...}')
-	\$ $GKB_NAME_TO_PATH query --body '{\"target\":\"Statement\",\"filters\":{\"source\":{\"target\":\"Source\",\"filters\":{\"name\":\"moa\"}}}}'
-	\$ $GKB_NAME_TO_PATH query Statement source '{\"target\":\"Source\",\"filters\":{\"name\":\"moa\"}}'
+	  \$ $GKB_NAME_TO_PATH query --body '{\"target\":\"Statement\",\"filters\":{\"source\":{\"target\":\"Source\",\"filters\":{\"name\":\"moa\"}}}}'
+	  \$ $GKB_NAME_TO_PATH query Statement source '{\"target\":\"Source\",\"filters\":{\"name\":\"moa\"}}'
 
 	# When the value of one of the filters is the result of a subquery;
 	# in the shape of an RID or a list of RIDs (i.e. '[\"<rid>\",\"<rid>\",...]')
-	\$ $GKB_NAME_TO_PATH query Statement source 37:17
-	\$ $GKB_NAME_TO_PATH query Statement source '#37:17'
-	\$ $GKB_NAME_TO_PATH query Statement source '[\"#37:17\",\"#38:1\"]'
+	  \$ $GKB_NAME_TO_PATH query Statement source 37:17
+	  \$ $GKB_NAME_TO_PATH query Statement source '#37:17'
+	  \$ $GKB_NAME_TO_PATH query Statement source '[\"#37:17\",\"#38:1\"]'
 
 Fixed subqueries
 
-	Get fixed subqueries example with \$ $GKB_NAME_TO_PATH query --fixed
+	Get fixed subqueries example with '\$ $GKB_NAME_TO_PATH query --fixed'
 	"
 	exit 0
 }
@@ -134,51 +146,204 @@ queryType =
 
 
 ancestors
-\$ $GKB_NAME_TO_PATH query -X queryType ancestors \\
 
-	# Returns VERTICES
+	# Returns VERTICES (NODES) only
 	# Traverse the tree on hierarchy-type edges (e.g. SubClassOf, ElementOf, etc.) for children nodes
 	# Edges are followed in the out-in direction
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType ancestors \\
+	    Feature displayName BRCA1
 
 descendants
-\$ $GKB_NAME_TO_PATH query -X queryType descendants \\
 
-	# Returns VERTICES
+	# Returns VERTICES (NODES) only
 	# Traverse the tree on hierarchy-type edges (e.g. SubClassOf, ElementOf, etc.) for parent nodes
 	# Edges are followed in the in-out direction
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType descendants \\
+	    Feature displayName BRCA1
 
 edge
-\$ $GKB_NAME_TO_PATH query -X queryType edge \\
 
-	# Returns EDGES
+	# Returns EDGES only
 	# Specify which vertices to get edges from/to with vertexFilter
 	# Specify a direction (in|out|both); default to both
 	# Target one specific edge class (e.g. SubClassOf) or target them all with parent class 'E'.
-	-X vertexFilter '[\"147:0\",\"147:1\"]' \\
-	-X direction both \\
-	SubClassOf
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType edge \\
+	    -X vertexFilter '[\"147:0\",\"147:1\"]' \\
+	    -X direction out \\
+	    SubClassOf
 
 keyword
-\$ $GKB_NAME_TO_PATH query -X queryType keyword \\
 
-	# Returns EDGES and/or VERTICES
+	# Returns EDGES and/or VERTICES (NODES)
 	#
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType keyword \\
+	    Feature displayName BRCA1
 
 	# example with gene-drug interactions, interactionTypes field
 
 neighborhood
-\$ $GKB_NAME_TO_PATH query -X queryType neighborhood \\
 
-	# Returns VERTICES
-	#
+	** Unstable behavior - should be avoid
+	   For example, specifying returnProperties affects number of returned records! **
+
+	# Returns VERTICES (NODES) only
+	# Query for a vertex and then grab surrounding vertices (linked by any edges in all directions)
+	# up to a given depth; depthIn default to 3, max to 4, 0 is ignored
+	# Target class with filters are required.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType neighborhood \\
+	    -X depthIn 1 \\
+	    Vocabulary name deletion
 
 similarTo
-\$ $GKB_NAME_TO_PATH query -X queryType similarTo \\
 
-	# Returns VERTICES
-	# Traverse the tree on similarity-type edges (e.g. AliasOf, DeprecatedBy, CrossReferenceOf, etc.)
-	# Edges are always followed on both directions
+	# Returns VERTICES (NODES) only
+	# Query for all vertices of the tree given one or more vextices to start with
+	# treeEdges, the hierarchical edge classes to follow up and down; default to ['SubClassOf', 'ElementOf', 'Infers']
+	# edges, the similarity edge classes to follow sideways; default to ['AliasOf', 'DeprecatedBy', 'CrossReferenceOf', GeneralizationOf']
+	# target needs to be an RID (e.g. 147:1), an array of RIDs or a subquery. Filters not accepted!
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType similarTo \\
+	    -X treeEdges '[\"SubClassOf\"]' \\
+	    -X edges '[\"AliasOf\"]' \\
+	    147:1
+	# Example with the target being a subquery:
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType similarTo \\
+	    -X treeEdges '[\"SubClassOf\"]' \\
+	    -X edges '[\"AliasOf\"]' \\
+	    '{\"target\":\"Vocabulary\",\"filters\":{\"name\":\"deletion\"}}'
+	"
+	exit 0
+}
 
+gkb_query_operators_examples() {
+	echo "GraphKB CLI v$GKB_VERSION
+Query command filter operators examples
+(all examples are given using --filter override)
+
+operator:
+	=|>|>=|<|<=|CONTAINSTEXT|CONTAINS|CONTAINSALL|CONTAINSANY|IN|INSTANCEOF|IS
+	* There is no 'NOT'/'!=' operator available.
+
+
+Exact match:
+
+=
+
+	# Search for an exact match between two strings, two numbers or two iterables.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter displayName = 'TERT:c.-124C>T' \\
+	    PositionalVariant
+
+
+Numerical comparaisons:
+
+'>'
+
+	# Greater than. Must be inside singlequotes
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter createdAt '>' 1721077386370 \\
+	    Statement
+
+'>='
+
+	# Greater than or equal to. Must be inside singlequotes
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter updatedAt '>=' 1721077386370 \\
+	    Statement
+
+'<'
+
+	# Smaller than. Must be inside singlequotes
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter deletedAt '<' 1721077386370 \\
+	    Statement
+
+'<='
+
+	# Smaller than or equal to. Must be inside singlequotes
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter deletedAt '<=' 1721077386370 \\
+	    Statement
+
+
+Searching text:
+
+CONTAINSTEXT
+
+	# Search for a substring inside a string.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter displayName CONTAINSTEXT TERT \\
+	    PositionalVariant
+
+
+Filtering an iterable field:
+
+CONTAINS
+
+	# Filtering an iterable field by one specific value (not an array).
+	# True if any element in iterable matches the given value.
+	# Similar to CONTAINSANY/IN operator but when the given value is not an iterable.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter conditions CONTAINS 160:0 \\
+	    Statement
+
+CONTAINSANY, IN
+
+	# Both operators show the same behavior in the context on the GraphKB API
+	# Filtering an iterable field by an array of one or more value(s).
+	# Array needs to be inside singlequotes; values needs to be inside doublequotes.
+	# True if any given value is present in the iterable, with an exact match for that value.
+	# Similar to CONTAINS operator but when the value is itself an iterable.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter conditions CONTAINSANY '[\"160:0\",\"121:24002\"]' \\
+	    Statement
+
+CONTAINSALL
+ 
+	# Filtering an iterable field by an array of one or more value(s).
+	# Array needs to be inside singlequotes; values need to be inside doublequotes.
+	# True if all given values are present in iterable, with an exact match for each value.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter conditions CONTAINSALL '[\"160:0\",\"121:24002\"]' \\
+	    Statement
+
+
+Filtering on classes:
+
+INSTANCEOF
+
+	# Filtering on classes (e.g. PositionalVariant, child class of Variant)
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --limit 1 \\
+	    --filter @this INSTANCEOF PositionalVariant \\
+	    Variant
+
+	# Restricted by the API to properties that 'exixts on the model',
+	# so no obvious usefull cases like filtering records by embedded link class
+	# As a counter example, the following won't work (since 'subject.@class' is not a property of the Statement model):
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter subject.@class INSTANCEOF Therapy \\
+	    Statement
+	# To acheive something similar, use instead the following, somewhat redundand, --allFilters override:
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --allFilters '{"subject":{"target":"Therapy","filters":{"@class":"Therapy"}}}'
+		Statement
+
+
+Filtering on null:
+
+IS
+
+	# Can be used to filter on 'null' values, but cannot be combined with NOT
+	  \$ $GKB_NAME_TO_PATH query \\
+	    --filter reviewStatus IS null \\
+	    Statement
 	"
 	exit 0
 }
@@ -205,6 +370,7 @@ actualLimit=1000
 actualMax=9999999
 actualSkip=0
 filters=()
+filtersObj=''
 overrides=()
 clauseType='AND'
 
@@ -217,15 +383,18 @@ formattedFilters='[]'
 ###########################
 
 gkb_query_ammend_filter() {
-	if [[ $2 =~ ^-?[0-9]+$ || ${2:0:1} == '[' ]]; then
+	if [[ $3 =~ ^-?[0-9]+$ || ${3:0:1} == '[' ]]; then
 		# Filter is given as key-value; value is a number or an array
-        formattedFilters=$(echo $formattedFilters | jq -c ". += [{\"$1\":$2}]")
+        formattedFilters=$(echo $formattedFilters | jq -c ". += [{\"$1\":$3,\"operator\":\"$2\"}]")
 	elif [[ ${1:0:1} == '{' ]]; then
-		# Filter is given as an object
-        formattedFilters=$(echo $formattedFilters | jq -c ". += [$1]")
+		# Filter is given as an object, replacing the whole filters object
+        formattedFilters=$(echo $formattedFilters | jq -c ". = $1")
+	elif [[ $3 == 'null' ]]; then
+		# Filter is given as key-value; value is 'null'
+        formattedFilters=$(echo $formattedFilters | jq -c ". += [{\"$1\":null,\"operator\":\"$2\"}]")
 	else
 		# Filter is given as key-value; value is a string
-        formattedFilters=$(echo $formattedFilters | jq -c ". += [{\"$1\":\"$2\"}]")
+        formattedFilters=$(echo $formattedFilters | jq -c ". += [{\"$1\":\"$3\",\"operator\":\"$2\"}]")
 	fi
 }
 
@@ -242,67 +411,15 @@ gkb_query_ammend_body() {
 gkb_query() {
 
 	###
-	# PROCESSING POSITIONAL ARGUMENTS
+	# AMMENDING QUERY BODY
 
-	# Check for 1st argument as target value.
-	# If the result of a subquery (e.g. an RID or an array of RIDs) then format accordingly
-	if [[ ${1:0:1} == '[' ]];then
-		firstArg=$1
-	elif [[ ${1:0:1} == '#' || ${1:0:1} =~ ^-?[0-9]+$ ]];then
-		firstArg="[\"$1\"]"
-	else
-		firstArg="\"$1\""
+	# Ammend query body with --history
+	if [[ $history == true ]]; then
+		# Make sure we're not overriding by false any history=true in the query's body
+		gkb_query_ammend_body 'history' $history
 	fi
 
-	# Cheak for 2nd argument as either filter name or RID value; format accordingly
-	if [[ $2 != '' && $3 != '' ]]; then
-		secondArg=$2 # As filter name
-	elif [[ $2 != '' ]]; then
-		secondArg=$2 # As filter value
-	fi
-
-	# Check for 3rd argument as filter value.
-	# If the result of a subquery (e.g. an RID or an array of RIDs), format accordingly
-	if [[ $3 != '' ]]; then
-		if [[ ${3:0:1} == '[' ]];then
-			thirdArg=$3
-		elif [[ ${3:0:1} == '#' || ${3:0:1} =~ ^-?[0-9]+$ ]];then
-			thirdArg="[\"$3\"]"
-		elif [[ ${3:0:1} == '{' ]]; then
-			thirdArg=$3
-		else
-			thirdArg="\"$3\""
-		fi
-	fi
-
-	###
-	# PROCESSING --body & --file OPTIONS
-
-	if [[ $body != '' ]]; then
-		formattedData=$body
-		# TODO: when there is still positional args
-	elif [[ $filepath != '' ]]; then
-		formattedData=`cat $filepath`
-		# TODO: when there is still positional args
-	elif [[ $secondArg && $thirdArg ]]; then
-		# Pattern for a given target and a key-value filter
-		printf -v formattedData '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
-	elif [[ $secondArg ]]; then
-		# Pattern for a given target and an RID filter
-		printf -v formattedData '{"target":%s,"filters":{"AND":[{"@rid":"%s"}]}}' $firstArg $secondArg
-	else
-		# Pattern for a given target only; no positional filter
-		printf -v formattedData '{"target":%s}' $firstArg
-	fi
-
-	# Removes trailing whitespaces, if any
-	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
-
-	###
-	# AMMENDING QUERY BODY WITH --override
-
-	# Ammend query body with --history, --limit & --skip
-	gkb_query_ammend_body 'history' $history
+	# Ammend query body with --limit & --skip
 	gkb_query_ammend_body 'limit' $actualLimit
 	gkb_query_ammend_body 'skip' $actualSkip
 
@@ -375,6 +492,67 @@ gkb_query() {
 
 gkb_query_preprocessing() {
 
+	###
+	# PROCESSING POSITIONAL ARGUMENTS
+
+	# Check for 1st argument as target value.
+	# If the result of a subquery (e.g. an RID or an array of RIDs) then format accordingly
+	# If an actuel subquery (e.g. an object) then format accordingly
+	if [[ ${1:0:1} == '[' || ${1:0:1} == '{' ]];then
+		firstArg=$1
+	elif [[ ${1:0:1} == '#' || ${1:0:1} =~ ^-?[0-9]+$ ]];then
+		firstArg="[\"$1\"]"
+	else
+		firstArg="\"$1\""
+	fi
+
+	# Cheak for 2nd argument as either filter name or RID value; format accordingly
+	if [[ $2 != '' && $3 != '' ]]; then
+		secondArg=$2 # As filter name
+	elif [[ $2 != '' ]]; then
+		secondArg=$2 # As filter value
+	fi
+
+	# Check for 3rd argument as filter value.
+	# If the result of a subquery (e.g. an RID or an array of RIDs), format accordingly
+	if [[ $3 != '' ]]; then
+		if [[ ${3:0:1} == '[' ]];then
+			thirdArg=$3
+		elif [[ ${3:0:1} == '#' || ${3:0:1} =~ ^-?[0-9]+$ ]];then
+			thirdArg="[\"$3\"]"
+		elif [[ ${3:0:1} == '{' ]]; then
+			thirdArg=$3
+		else
+			thirdArg="\"$3\""
+		fi
+	fi
+
+	###
+	# PROCESSING --body & --file OPTIONS
+
+	if [[ $body != '' ]]; then
+		formattedData=$body
+		# TODO: when there is still positional args
+	elif [[ $filepath != '' ]]; then
+		formattedData=`cat $filepath`
+		# TODO: when there is still positional args
+	elif [[ $secondArg && $thirdArg ]]; then
+		# Pattern for a given target and a key-value filter
+		printf -v formattedData '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
+	elif [[ $secondArg ]]; then
+		# Pattern for a given target and an RID filter
+		printf -v formattedData '{"target":%s,"filters":{"AND":[{"@rid":"%s"}]}}' $firstArg $secondArg
+	else
+		# Pattern for a given target only; no positional filter
+		printf -v formattedData '{"target":%s}' $firstArg
+	fi
+
+	# Removes trailing whitespaces, if any
+	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
+
+	###
+	# PROCESSING max, limit & skip QUERY PROPERTIES
+
 	# Max records total
 	if [[ $max != '' && $max =~ ^-?[0-9]+$ ]]; then
 		actualMax=$((max))
@@ -391,14 +569,16 @@ gkb_query_preprocessing() {
 		actualSkip=$((skip))
 	fi
 
-	# WITHOUT PAGINATION
+	###########################
+	# QUERY WITHOUT PAGINATION
 	# Single query w/ early exit
 	if [[ "$paginate" != true ]]; then
 		gkb_query $@
 		exit 0
 	fi
 
-	# WITH PAGINATION
+	###########################
+	# QUERY WITH PAGINATION
 	# Multiple queries w/ concatenated results
 	moreQueries=true
 	totalRecords=0
@@ -446,23 +626,25 @@ gkb_query_preprocessing() {
 ###############################
 # 0: key option
 # 1: key-value option
-# 2: key-key_value option; e.g. -X orderBy name; e.g. -F name graphkb_importer
-# 3: return help or examples
+# 2: key-value x2 option; e.g. -X orderBy name
+# 3: key-value x3 option; e.g. -F name graphkb_importer '='
+# 4: return help or examples
 
 gkb_query_options() {
 	case $1 in
+		# Regular options
 		'-b'|'--body')
 			if [[ $2 != '' ]]; then
 				echo "1 body='$2'"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
 		'-f'|'--file')
 			if [[ $2 != '' ]]; then
 				echo "1 filepath='$2'"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
 		'-H'|'--history')
@@ -472,14 +654,14 @@ gkb_query_options() {
 			if [[ $2 != '' ]]; then
 				echo "1 limit='$2'"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
 		'-m'|'--max')
 			if [[ $2 != '' ]]; then
 				echo "1 max='$2'"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
 		'-p'|'--paginate')
@@ -489,28 +671,37 @@ gkb_query_options() {
 			if [[ $2 != '' ]]; then
 				echo "1 skip='$2'"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
-		'-X'|'--override'|'--overrides')
+		# Overrides
+		'-A'|'--Allfilters')
+			if [[ $2 != '' ]]; then
+				echo "1 filtersObj='$2'"
+			else
+				echo "4 $1"
+			fi
+		;;
+		'-F'|'--filter')
+			if [[ $4 != '' ]]; then
+				echo "3 filter $2 $3 $4"
+			else
+				echo "4 $1"
+			fi
+		;;
+		'-O'|'--or')
+			echo "0 clauseType='OR'"
+		;;
+		'-X'|'--override')
 			if [[ $3 != '' ]]; then
 				echo "2 override $2 $3"
 			else
-				echo "3 $1"
+				echo "4 $1"
 			fi
 		;;
-		'-F'|'--filter'|'--filters')
-			if [[ $3 != '' ]]; then
-					echo "2 filter $2 $3"
-				else
-					echo "3 $1"
-			fi
-		;;
-		'-O'|'--or'|'--Or'|'--OR')
-			echo "0 clauseType='OR'"
-		;;
+		# Help
 		*)
-			echo "3 $1"
+			echo "4 $1"
 		;;
 	esac
 }
@@ -528,27 +719,23 @@ for (( i=1; i <= "$#"; i++ )); do
         # Extract option
         nextArg=$(($i+1))
         nextArg2=$(($i+2))
-        IFS=' ' read -r -a option <<< $(gkb_query_options ${!i} ${!nextArg} ${!nextArg2})
+        nextArg3=$(($i+3))
+        IFS=' ' read -r -a option <<< $(gkb_query_options ${!i} ${!nextArg} ${!nextArg2} ${!nextArg3})
 
 		if [[ ${option[0]} == "0" ]]; then
 			options+=(${option[1]})
 		elif [[ ${option[0]} == "1" ]]; then
 			options+=(${option[1]})
-			# Skip next argument since option is paired with a value
-			i=$(($i+1))
-		elif [[ ${option[0]} == "2" ]]; then # for overrides
-			case ${option[1]} in
-				'override')
-					overrides+=("${option[2]} ${option[3]}")
-				;;
-				'filter')
-					filters+=("${option[2]} ${option[3]}")
-				;;
-			esac
-			i=$(($i+2))
+			i=$(($i+1)) # Skip 1 next arg
+		elif [[ ${option[0]} == "2" ]]; then
+			overrides+=("${option[2]} ${option[3]}")
+			i=$(($i+2)) # Skip 2 next arg
 		elif [[ ${option[0]} == "3" ]]; then
+			filters+=("${option[2]} ${option[3]} ${option[4]}")
+			i=$(($i+3)) # Skip 3 next arg
+		elif [[ ${option[0]} == "4" ]]; then
 			case ${option[1]} in
-				'-e'|'--example'|'--examples')
+				'-e'|'--examples')
 					gkb_query_examples
 				;;
 				'--fixed')
@@ -557,8 +744,11 @@ for (( i=1; i <= "$#"; i++ )); do
 				'-h'|'--help')
 					gkb_query_help 0
 				;;
+				'-o'|'--operators')
+					gkb_query_operators_examples
+				;;
 				*)
-					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with one or omre value(s)?"
+					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with one or more value(s)?"
 					gkb_query_help 1
 				;;
 			esac
@@ -580,6 +770,7 @@ done
 
 # Run command
 if [[ $1 != '' ]]; then
+	# Just need at least one positional argument OR an option, so $1 works here
 	gkb_query_preprocessing ${@:pos}
 else
 	gkb_query_help 1

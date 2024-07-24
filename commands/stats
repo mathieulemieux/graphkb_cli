@@ -11,19 +11,49 @@ history=false
 gkb_stats_help() {
 	echo "
 Command: stats
-Usage: gkb stats [options] [classes]
+Usage: gkb stats [help|options] [classes]
+
+Help:
+	-e, --examples  ...
+	-h, --help      Get help on the stats command
 
 Options:
-	-c, --classList <value>  List of classes to compile seperate counts for. If ommited,
-	                         all classes but those abstract, embeeded or non-terminal (w/ subclasses)
-	                         Classes MUST be seperated by a comma, WITHOUT space.
-	-g, --groupBy   <value>  A column name to group counts on.
-	                         [relevance|subject|conditions|evidence|source|
-							 evidenceLevel|type|reference1|reference2]
-	    --history            Include soft-deleted records
-	-h, --help               Get help on the stats command
+	-g, --groupBy <value> A column name to group counts on.
+	                      One of [relevance|subject|conditions|evidence|source|
+	                      evidenceLevel|type|reference1|reference2]
+	-H, --history         Include soft-deleted records
 	"
 	exit $1
+}
+
+gkb_stats_examples() {
+	echo "GraphKB CLI v$GKB_VERSION
+Stats command examples
+
+Record counts:
+
+	# If classes arg is ommited, all classes but those abstract,
+	# embeeded or non-terminal (w/ subclasses) get compiled
+	  $ $GKB_NAME_TO_PATH stats
+
+	# The list of classes to compile seperate counts for must be
+	# seperated by a comma, without space.
+	  $ $GKB_NAME_TO_PATH stats Statement
+	  $ $GKB_NAME_TO_PATH stats Statement,PositionalVariant,Therapy
+
+	# Get soft-deleted records accounted for with the --history flag
+	  $ $GKB_NAME_TO_PATH stats --history Statement
+
+Grouping:
+
+	# Chose one grouping field among: relevance, subject, conditions, evidence, source,
+	# evidenceLevel, type, reference1 & reference2.
+	  $ $GKB_NAME_TO_PATH stats --groupBy source Therapy
+	  $ $GKB_NAME_TO_PATH stats --groupBy relevance Statement
+	  $ $GKB_NAME_TO_PATH stats --groupBy type PositionalVariant
+
+	"
+	exit 0
 }
 
 
@@ -36,13 +66,6 @@ Options:
 gkb_stats_options()
 {
 	case $1 in
-		'-c'|'--classList')
-			if [[ $2 != '' ]]; then
-				echo "1 classList=$2"
-			else
-				echo "2 $1"
-			fi
-		;;
 		'-g'|'--groupBy')
 			if [[ $2 != '' ]]; then
 				echo "1 groupBy=$2"
@@ -50,7 +73,7 @@ gkb_stats_options()
 				echo "2 $1"
 			fi
 		;;
-		'--history')
+		'-H'|'--history')
 			echo "0 history=true"
 		;;
 		*)
@@ -65,8 +88,8 @@ gkb_stats_options()
 
 gkb_stats()
 {
-	if [[ $classList != '' ]]; then
-		printf -v classList 'classList=%s' $classList
+	if [[ $1 != '' ]]; then
+		printf -v classList 'classList=%s' $1
 	else
 		printf -v classList ''
 	fi
@@ -97,6 +120,7 @@ gkb_stats()
 ###########################
 
 # Extract options
+pos=1
 options=()
 for (( i=1; i <= "$#"; i++ )); do
     if [[ ${!i:0:1} == "-" ]]; then
@@ -112,15 +136,26 @@ for (( i=1; i <= "$#"; i++ )); do
 			# Skip next argument since option is paired with a value
 			i=$(($i+1))
 		else
-			if [[ ${option[1]} != '-h' ]] && [[ ${option[1]} != '--help' ]]; then
-				echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with a value?"
-			fi
-			gkb_stats_help 0
+			case ${option[1]} in
+				'-e'|'--examples')
+					gkb_stats_examples
+				;;
+				'-h'|'--help')
+					gkb_stats_help 0
+				;;
+				*)
+					echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with one or more value(s)?"
+					gkb_stats_help 1
+				;;
+			esac
 		fi
 
     else
+		# Save position of 1st non-option argument & exit loop
+        pos=$i
         break
     fi
+    pos=$i
 done
 
 # Set option variables
@@ -130,4 +165,4 @@ for (( i=0; i < ${#options[@]}; i++ )); do
 done
 
 # Run command
-gkb_stats
+gkb_stats ${@:pos}

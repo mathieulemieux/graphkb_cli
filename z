@@ -1,0 +1,11 @@
+gkb_crud_options()
+{
+    echo "1body=$1"
+}
+
+option=$(gkb_crud_options $1)
+echo $option
+
+options=()
+options+=(${option[1]})
+echo ${options[0]}

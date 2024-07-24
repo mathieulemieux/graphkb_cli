@@ -1,0 +1,14 @@
+{
+  "target": "Disease",
+  "returnProperties": ["@rid", "displayName"],
+  "filters": {
+    "source": {
+      "target": "Source",
+      "filters": {
+        "name": "disease ontology"
+      }
+    }
+  },
+  "orderBy": ["displayName"],
+  "limit": 5
+}

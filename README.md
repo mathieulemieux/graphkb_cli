@@ -14,8 +14,8 @@ source ~/.bashrc
 gkb --version
 ```
 
-### jq
-Since many of the CLI functionalities have a dependency to jq, you may want to make sure this program is also accessible in your path.
+### Dependency to jq
+Since the CLI have a dependency to jq, make sure this program is also accessible in your path.
 ```
 jq --version
 ```

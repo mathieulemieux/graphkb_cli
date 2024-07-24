@@ -6,23 +6,28 @@ service=''
 ###########################
 
 gkb_extensions_help() {
-	echo "
+	echo "GraphKB CLI v$GKB_VERSION
+Extensions command help
+
 Command: extensions
 
-Usage: $GKB_NAME_TO_PATH extensions [options] <service> <id>
+Usage: $GKB_NAME_TO_PATH extensions [help] <service> <id>
 
-Options:
-	-h, --help          Get help on the extensions command
+Help:
+	-h, --help  Get help on the extensions command
 
-Avail. services:
-	clinicaltrialsgov   <id>  Given a trial id, query the clinicaltrials.gov API
-	                          \$ $GKB_NAME_TO_PATH extensions clinicaltrialsgov NCT03478891
+Services:
+	C, clinicaltrialsgov <id>  Given a trial id, query the clinicaltrials.gov API
+	                           e.g. \$ $GKB_NAME_TO_PATH extensions clinicaltrialsgov NCT03478891
+	                                \$ $GKB_NAME_TO_PATH e C NCT03478891
 
-	gene                <id>  Given a gene id, query the Gene database of the NCBI's Entrez API
-	                          \$ $GKB_NAME_TO_PATH extensions gene 1956
+	G, gene <id>               Given a gene id, query the Gene database of the NCBI's Entrez API
+	                           e.g. \$ $GKB_NAME_TO_PATH extensions gene 1956
+	                                \$ $GKB_NAME_TO_PATH e G 1956
 
-	pubmed              <id>  Given a Pubmed id, query the Pubmed database of the NCBI's Entrez API
-	                          \$ $GKB_NAME_TO_PATH extensions pubmed 28244479
+	P, pubmed <id>             Given a Pubmed id, query the Pubmed database of the NCBI's Entrez API
+	                           e.g. \$ $GKB_NAME_TO_PATH extensions pubmed 28244479
+	                                \$ $GKB_NAME_TO_PATH e P 28244479
 	"
 	exit $1
 }
@@ -39,13 +44,13 @@ gkb_extensions()
 	fi
 
 	case $1 in
-		'clinicaltrialsgov'|'clinicaltrials'|'clinicaltrial'|'c')
+		'C'|'clinicaltrialsgov')
 			service='clinicaltrialsgov'
 		;;
-		'gene'|'genes'|'g')
+		'G'|'gene')
 			service='gene'
 		;;
-		'pubmed'|'p')
+		'P'|'pubmed')
 			service='pubmed'
 		;;
 		*)
