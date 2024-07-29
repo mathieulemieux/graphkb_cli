@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-service=''
-
 # Help
 ###########################
 
@@ -38,10 +36,6 @@ Services:
 
 gkb_extensions()
 {
-	if [[ $2 == '' ]]; then
-		echo 'A record id to query for must be provided as last positional argument.'
-		gkb_extensions_help 1
-	fi
 
 	case $1 in
 		'C'|'clinicaltrialsgov')
@@ -70,63 +64,21 @@ gkb_extensions()
 }
 
 
-# Options
-###############################
-# 1: key-value option
-# 2: return help
-
-gkb_extensions_options()
-{
-	case $1 in
-		*)
-			echo "2 $1"
-		;;
-	esac
-}
-
-
 # Command Entry Point
 ###########################
 
-# Extract options
-pos=1
-options=()
-for (( i=1; i <= "$#"; i++ )); do
-    if [[ ${!i:0:1} == "-" ]]; then
+# Help
+if [[ $1 == '-h' ]] || [[ $1 == '--help' ]]; then
+	gkb_extensions_help 0
+elif [[ ${1:0:1} == "-" ]]; then
+	echo "$1 cannot be processed. Is it an option needing to come before the command?"
+	gkb_extensions_help 1
+fi
 
-        # Extract option
-        nextArg=$(($i+1))
-        IFS=' ' read -r -a option <<< $(gkb_extensions_options ${!i} ${!nextArg})
-
-		if [[ ${option[0]} == "1" ]]; then
-			options+=(${option[1]})
-			# Skip next argument since option is paired with a value
-			i=$(($i+1))
-		else
-			if [[ ${option[1]} != '-h' ]] && [[ ${option[1]} != '--help' ]]; then
-				echo "${option[1]} cannot be processed. Is the option valid or needs to be paired with a value?"
-				gkb_extensions_help 1
-			fi
-			gkb_extensions_help 0
-		fi
-
-    else
-		# Save position of 1st non-option argument & exit loop
-        pos=$i
-        break
-    fi
-    pos=$i
-done
-
-# Set option variables
-for (( i=0; i < ${#options[@]}; i++ )); do
-	# Carefull use of dynamic eval!
-	eval ${options[i]}
-done
 
 # Run command
-if [[ $1 != '' ]]; then
-	gkb_extensions ${@:pos}
+if [[ $2 != '' ]]; then
+	gkb_extensions $@
 else
 	gkb_extensions_help 1
 fi

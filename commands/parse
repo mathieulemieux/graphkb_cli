@@ -129,7 +129,6 @@ for (( i=1; i <= "$#"; i++ )); do
 			esac
 		fi
     else
-		# Save position of 1st non-option argument & exit loop
         pos=$i
         break
     fi

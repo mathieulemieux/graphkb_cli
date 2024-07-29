@@ -1,11 +1,30 @@
-gkb_crud_options()
-{
-    echo "1body=$1"
-}
+# gkb_crud_options()
+# {
+#     echo "1body=$1"
+# }
 
-option=$(gkb_crud_options $1)
-echo $option
+# option=$(gkb_crud_options $1)
+# echo $option
 
-options=()
-options+=(${option[1]})
-echo ${options[0]}
+# options=()
+# options+=(${option[1]})
+# echo ${options[0]}
+
+
+# a=9
+# a=$((a-1))
+# echo $a
+
+export GKB_WORKDIR=$(cd $(dirname $0) && pwd)
+
+if [[ $1 != '' ]]; then
+    api=$1
+else
+    api=$(jq -c ".default_api" $GKB_WORKDIR/config)
+fi
+
+url=$(jq -c ".url.$api" $GKB_WORKDIR/config)
+
+if [[ $url != null ]]; then
+    echo $url
+fi

@@ -20,7 +20,8 @@ Options:
 	-b, --body <value>   Pass the query's body as a strignify json. Following positional args are ignored
 	                     Value needs to be passed INSIDE singlequotes.
 	-f, --file <value>   Pass the query's body as a json file. Following positional args are ignored.
-	                     Specific conternt can be overridden by all the other options
+	                     --body option wwill be ignored.
+	                     Specific content can be overridden by all the other options.
 	-H, --history        Includes soft-deleted records
 	-l, --limit <value>  Limit of records returned per API call. Default and maxed out at 1000
 	-m, --max <value>    Set the maximum total number of records to be returned
@@ -30,7 +31,8 @@ Options:
 
 Overrides:
 	-A, --allFilters <object>        Override the filters object as a whole.
-	                                 Object needs to be INSIDE singlequotes.
+	                                 Object needs to be INSIDE singlequotes
+	                                 --filter & --or overrides will be ignored.
 	-F, --filter <key> <op> <value>  Add or override any conditions in filters as key-operator-value.
 	                                 See '\$ $GKB_NAME_TO_PATH query -o' for help on operators.
 	-O, --or                         Set/override filters' clause type as 'OR'; default is 'AND'.
@@ -38,7 +40,7 @@ Overrides:
 
 Target:
 	Mandatory unless given otherwise (via --body, --file or --override).
-	Can be a class, an RID, an array of RIDs or a subquery.
+	Can be a class, an RID, an array of RIDs or a subquery object (the later inside singlequotes).
 	"
 	exit $1
 }
@@ -275,11 +277,18 @@ Numerical comparaisons:
 Searching text:
 
 CONTAINSTEXT
+\$ $GKB_NAME_TO_PATH query \\
 
 	# Search for a substring inside a string.
-	  \$ $GKB_NAME_TO_PATH query \\
-	    --filter displayName CONTAINSTEXT TERT \\
-	    PositionalVariant
+	  --filter displayName CONTAINSTEXT TERT \\
+	  PositionalVariant
+
+	# Only the first word is considered. These two queries return the same results:
+	  --filter comment CONTAINSTEXT 'complete' \\
+	  Statement | jq .result[].comment
+	# Vs.
+	  --filter comment CONTAINSTEXT 'complete and' \\
+	  Statement | jq .result[].comment
 
 
 Filtering an iterable field:
@@ -305,7 +314,7 @@ CONTAINSANY, IN
 	    Statement
 
 CONTAINSALL
- 
+
 	# Filtering an iterable field by an array of one or more value(s).
 	# Array needs to be inside singlequotes; values need to be inside doublequotes.
 	# True if all given values are present in iterable, with an exact match for each value.
@@ -317,23 +326,21 @@ CONTAINSALL
 Filtering on classes:
 
 INSTANCEOF
+  \$ $GKB_NAME_TO_PATH query \\
 
 	# Filtering on classes (e.g. PositionalVariant, child class of Variant)
-	  \$ $GKB_NAME_TO_PATH query \\
-	    --limit 1 \\
-	    --filter @this INSTANCEOF PositionalVariant \\
-	    Variant
+	  --limit 1 \\
+	  --filter @this INSTANCEOF PositionalVariant \\
+	  Variant
 
 	# Restricted by the API to properties that 'exixts on the model',
 	# so no obvious usefull cases like filtering records by embedded link class
 	# As a counter example, the following won't work (since 'subject.@class' is not a property of the Statement model):
-	  \$ $GKB_NAME_TO_PATH query \\
-	    --filter subject.@class INSTANCEOF Therapy \\
-	    Statement
+	  --filter subject.@class INSTANCEOF Therapy \\
+	  Statement
 	# To acheive something similar, use instead the following, somewhat redundand, --allFilters override:
-	  \$ $GKB_NAME_TO_PATH query \\
-	    --allFilters '{"subject":{"target":"Therapy","filters":{"@class":"Therapy"}}}'
-		Statement
+	  --allFilters '{"subject":{"target":"Therapy","filters":{"@class":"Therapy"}}}'
+	  Statement
 
 
 Filtering on null:
@@ -423,13 +430,13 @@ gkb_query() {
 	gkb_query_ammend_body 'limit' $actualLimit
 	gkb_query_ammend_body 'skip' $actualSkip
 
-	# Ammend query body with other optional overrides (--override)
+	# Ammend query body with --override
 	for (( i=0; i < ${#overrides[@]}; i++ )); do
 		gkb_query_ammend_body ${overrides[i]}
 	done
 
 	###
-	# FILTERS
+	# INDIVIDUAL FILTER(S) OVERRIDE(S)
 
 	# Preprocessing filter overrides
 	for (( i=0; i < ${#filters[@]}; i++ )); do
@@ -474,10 +481,18 @@ gkb_query() {
 	fi
 
 	###
+	# FILTERS (WHOLE OBJECT OVERRIDE)
+	if [[ $filtersObj != '' ]]; then
+		formattedData=$(echo $formattedData | jq -c ".filters = $filtersObj")
+	fi
+
+	###
 	# ACTUAL QUERY
 
 	# Setting Auth header
 	printf -v headerAuth 'Authorization: %s' $GKB_TOKEN
+
+	echo $formattedData
 
 	# HTTP request
 	echo $(curl \
@@ -532,11 +547,16 @@ gkb_query_preprocessing() {
 
 	if [[ $body != '' ]]; then
 		formattedData=$body
-		# TODO: when there is still positional args
 	elif [[ $filepath != '' ]]; then
 		formattedData=`cat $filepath`
-		# TODO: when there is still positional args
-	elif [[ $secondArg && $thirdArg ]]; then
+	else
+		formattedData='{"target":""}'
+	fi
+
+	###
+	# Incorporating positional arguments
+
+	if [[ $secondArg && $thirdArg ]]; then
 		# Pattern for a given target and a key-value filter
 		printf -v formattedData '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
 	elif [[ $secondArg ]]; then
@@ -546,7 +566,6 @@ gkb_query_preprocessing() {
 		# Pattern for a given target only; no positional filter
 		printf -v formattedData '{"target":%s}' $firstArg
 	fi
-
 	# Removes trailing whitespaces, if any
 	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
 
@@ -618,7 +637,6 @@ gkb_query_preprocessing() {
 		fi
 
 	done
-	# echo "{\"metadata\":{\"records\":$totalRecords},\"result\":$results}"
 }
 
 
@@ -627,15 +645,16 @@ gkb_query_preprocessing() {
 # 0: key option
 # 1: key-value option
 # 2: key-value x2 option; e.g. -X orderBy name
-# 3: key-value x3 option; e.g. -F name graphkb_importer '='
+# 3: key-value x3 option; e.g. -F name '=' graphkb_importer
 # 4: return help or examples
+# 3: --body option; needs to be processed with special care for white spaces
 
 gkb_query_options() {
 	case $1 in
 		# Regular options
 		'-b'|'--body')
 			if [[ $2 != '' ]]; then
-				echo "1 body='$2'"
+				echo "5"
 			else
 				echo "4 $1"
 			fi
@@ -716,11 +735,13 @@ options=()
 for (( i=1; i <= "$#"; i++ )); do
     if [[ ${!i:0:1} == "-" ]]; then
 
-        # Extract option
-        nextArg=$(($i+1))
+        # Following args
+        nextArg1=$(($i+1))
         nextArg2=$(($i+2))
         nextArg3=$(($i+3))
-        IFS=' ' read -r -a option <<< $(gkb_query_options ${!i} ${!nextArg} ${!nextArg2} ${!nextArg3})
+
+		# Extract option
+        IFS=' ' read -r -a option <<< $(gkb_query_options ${!i} ${!nextArg1} ${!nextArg2} ${!nextArg3})
 
 		if [[ ${option[0]} == "0" ]]; then
 			options+=(${option[1]})
@@ -752,15 +773,20 @@ for (( i=1; i <= "$#"; i++ )); do
 					gkb_query_help 1
 				;;
 			esac
+		elif [[ ${option[0]} == "5" ]]; then
+			# special care for white spaces
+			body=${!nextArg1}
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
 		fi
 
     else
-		# Save position of 1st non-option argument & exit loop
-        pos=$i
+        pos=$((i-1))
         break
     fi
     pos=$i
 done
+pos=$((pos+1))
 
 # Set option variables
 for (( i=0; i < ${#options[@]}; i++ )); do

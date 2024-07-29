@@ -1,19 +1,8 @@
 {
-    "api": [
-        {
-            "case": "production|prod|p",
-            "name": "production",
-			"url": "https://graphkb-api.bcgsc.ca"
-        },
-        {
-            "case": "staging|s",
-            "name": "staging",
-			"url": "https://graphkbstaging-api.bcgsc.ca"
-        },
-        {
-            "case": "*",
-            "name": "development",
-			"url": "https://graphkbdev.bcgsc.ca"
-        }
-    ]
+    "url":{
+        "prod": "https://graphkb-api.bcgsc.ca/api",
+        "staging": "https://graphkbstaging-api.bcgsc.ca/api",
+        "dev": "https://graphkbdev-api.bcgsc.ca/api"
+    },
+    "default_api":"dev"
 }

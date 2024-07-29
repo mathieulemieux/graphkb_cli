@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
 
-classList=''
-groupBy=''
-history=false
-
-
 # Help
 ###########################
 
@@ -55,6 +50,13 @@ Grouping:
 	"
 	exit 0
 }
+
+# Globals
+###############################
+
+classList=''
+groupBy=''
+history=false
 
 
 # Options
@@ -151,7 +153,6 @@ for (( i=1; i <= "$#"; i++ )); do
 		fi
 
     else
-		# Save position of 1st non-option argument & exit loop
         pos=$i
         break
     fi

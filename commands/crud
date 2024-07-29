@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-method=$1
-neighbors=''
-filepath=''
-
 # Help
 ###########################
 
@@ -46,6 +42,7 @@ Crud commands Examples:
 DELETE
 
 	# Delete a specific active record on given class & RID, e.g. Disease & #133:0.
+	# Verticies get soft-deleted, edges get hard-deleted
 	  \$ $GKB_NAME_TO_PATH DELETE Disease 133:0
 
 GET
@@ -61,7 +58,7 @@ PATCH
 	# Update a specific active record on given class & RID.
 	# key-value pairs passed in the query's body will be updated.
 	  \$ $GKB_NAME_TO_PATH PATCH --body '{\"comment\":\"new comment\"}' Disease 133:0
-	  
+
 	# As always, can also be done using an external file, e.g. './body.json'
 	  \$ $GKB_NAME_TO_PATH PATCH --file ./body.json Disease 133:0
 
@@ -72,6 +69,14 @@ POST
 	"
 	exit 0
 }
+
+# Globals
+###########################
+
+method=$1
+body=''
+filepath=''
+neighbors=''
 
 
 # CRUD
@@ -141,13 +146,14 @@ gkb_crud()
 ###############################
 # 1: key-value option
 # 2: return help
+# 3: --body option; needs to be processed with special care for white spaces
 
 gkb_crud_options()
 {
 	case $1 in
 		'-b'|'--body')
 			if [[ $2 != '' ]]; then
-				echo "1 body='$2'"
+				echo "3"
 			else
 				echo "2 $1"
 			fi
@@ -188,7 +194,6 @@ for (( i=2; i <= "$#"; i++ )); do
 
 		if [[ ${option[0]} == "1" ]]; then
 			options+=(${option[1]})
-			echo ${options[0]}
 			# Skip next argument since option is paired with a value
 			i=$(($i+1))
 		elif [[ ${option[0]} == "2" ]]; then
@@ -204,10 +209,14 @@ for (( i=2; i <= "$#"; i++ )); do
 					gkb_crud_help 1
 				;;
 			esac
+		elif [[ ${option[0]} == "3" ]]; then
+			# special care for white spaces
+			body=${!nextArg}
+			# Skip next argument since option is paired with a value
+			i=$(($i+1))
 		fi
 
     else
-		# Save position of 1st non-option argument & exit loop
         pos=$i
         break
     fi
@@ -217,7 +226,6 @@ done
 # Set option variables
 for (( i=0; i < ${#options[@]}; i++ )); do
 	# Carefull use of dynamic eval!
-	# echo ${options[i]}
 	eval ${options[i]}
 done
 
