@@ -86,17 +86,18 @@ gkb parse 'EGFR:c.2573T>G'
 ```
 
 ###### Auth Needed
+Token (JWT) is automatically refreshed before every request using the API's token endpoint.
 ```
 # Querying database
 gkb query User name graphkb_importer
-gkb query -F name CONTAINSTEXT importer User
+gkb query --filter name CONTAINSTEXT importer User
 
 # CRUD operations
 gkb GET User 29:0
 gkb DELETE Disease 133:0
 gkb PATCH --body '{"comment":"test"}' Statement 133:0
 gkb POST --body '{"in":"#160:266","out":"#159:1169"}' Infers
-gkb POST --file ./examples/files/POST_PositionalVariant.json PositionalVariant
+gkb POST --file ./examples/POST_PositionalVariant.json PositionalVariant
 
 # Querying external APIs through GraphKB API
 gkb extensions clinicaltrialsgov NCT03478891

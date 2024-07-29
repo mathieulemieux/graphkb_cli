@@ -1,3 +1,0 @@
-gkb POST \
-    --file ./examples/files/POST_PositionalVariant.json \
-    PositionalVariant

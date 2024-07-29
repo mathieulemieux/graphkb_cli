@@ -19,6 +19,7 @@ Help:
 Options:
 	-b, --body <value>   Pass the query's body as a strignify json. Following positional args are ignored
 	                     Value needs to be passed INSIDE singlequotes.
+	                     Specific content can be overridden by all the other options.
 	-f, --file <value>   Pass the query's body as a json file. Following positional args are ignored.
 	                     --body option wwill be ignored.
 	                     Specific content can be overridden by all the other options.
@@ -41,6 +42,7 @@ Overrides:
 Target:
 	Mandatory unless given otherwise (via --body, --file or --override).
 	Can be a class, an RID, an array of RIDs or a subquery object (the later inside singlequotes).
+	Positional argument will always override corresponding property over evrething else.
 	"
 	exit $1
 }
@@ -79,7 +81,7 @@ Query's body as json
 	  \$ $GKB_NAME_TO_PATH query --body '{\"target\":\"User\",\"filters\":{\"@rid\":\"#29:0\"}}'
 
 	# Pass a query body from a file
-	  \$ $GKB_NAME_TO_PATH query --file '$GKB_WORKDIR/examples/queries/User.json'
+	  \$ $GKB_NAME_TO_PATH query --file $GKB_WORKDIR/examples/query_User.json
 
 Limits & pagination
 
@@ -179,18 +181,27 @@ edge
 
 keyword
 
-	# Returns EDGES and/or VERTICES (NODES)
-	#
+	# Returns VERTICES (NODES)
+	# Target must be a vertex class
+	# Note: depending on the targeted class, different fields will be searched
+	# keyword property is mandatory; minimum 3-letters length string. Multiple words can be given if separated with a space.
+	# operator is either '=' or CONTAINSTEXT; default to the later
 	  \$ $GKB_NAME_TO_PATH query \\
 	    -X queryType keyword \\
-	    Feature displayName BRCA1
-
-	# example with gene-drug interactions, interactionTypes field
+	    -X keyword BRCA1 \\
+	    -X operator = \\
+	    Feature
+	# With CategoryVariant for example, keyword is also searched in the type.name similarity tree
+	# so the following query also returns "FANCC copy loss" among others.
+	  \$ $GKB_NAME_TO_PATH query \\
+	    -X queryType keyword \\
+	    -X keyword deletion \\
+	    CategoryVariant
 
 neighborhood
 
-	** Unstable behavior - should be avoid
-	   For example, specifying returnProperties affects number of returned records! **
+	** Unstable behavior - should be avoided !!
+	   For example, specifying returnProperties affects number of returned records **
 
 	# Returns VERTICES (NODES) only
 	# Query for a vertex and then grab surrounding vertices (linked by any edges in all directions)
@@ -204,9 +215,9 @@ neighborhood
 similarTo
 
 	# Returns VERTICES (NODES) only
-	# Query for all vertices of the tree given one or more vextices to start with
-	# treeEdges, the hierarchical edge classes to follow up and down; default to ['SubClassOf', 'ElementOf', 'Infers']
-	# edges, the similarity edge classes to follow sideways; default to ['AliasOf', 'DeprecatedBy', 'CrossReferenceOf', GeneralizationOf']
+	# Query for all vertices of the tree given one or more vertices to start with
+	# Use 'treeEdges' to specify the hierarchical edge classes to follow up and down; default to ['SubClassOf', 'ElementOf', 'Infers']
+	# Use 'edges' to specify the similarity edge classes to follow sideways; default to ['AliasOf', 'DeprecatedBy', 'CrossReferenceOf', GeneralizationOf']
 	# target needs to be an RID (e.g. 147:1), an array of RIDs or a subquery. Filters not accepted!
 	  \$ $GKB_NAME_TO_PATH query \\
 	    -X queryType similarTo \\
@@ -279,16 +290,9 @@ Searching text:
 CONTAINSTEXT
 \$ $GKB_NAME_TO_PATH query \\
 
-	# Search for a substring inside a string.
+	# Search for a substring inside a string. Only the first word will be considered
 	  --filter displayName CONTAINSTEXT TERT \\
 	  PositionalVariant
-
-	# Only the first word is considered. These two queries return the same results:
-	  --filter comment CONTAINSTEXT 'complete' \\
-	  Statement | jq .result[].comment
-	# Vs.
-	  --filter comment CONTAINSTEXT 'complete and' \\
-	  Statement | jq .result[].comment
 
 
 Filtering an iterable field:
@@ -487,10 +491,87 @@ gkb_query() {
 	fi
 
 	###
+	# PROCESSING POSITIONAL ARGUMENTS
+	# Used as master overrides
+
+	# Check for 1st argument as target value.
+	# If the result of a subquery (i.e. an RID or an array of RIDs) then format accordingly
+	# If an actuel subquery (i.e. an object) then format accordingly
+	if [[ ${1:0:1} == '[' || ${1:0:1} == '{' ]];then
+		firstArg=$1
+	elif [[ ${1:0:1} == '#' || ${1:0:1} =~ ^-?[0-9]+$ ]];then
+		firstArg="[\"$1\"]"
+	elif [[ $1 != '' ]]; then
+		firstArg="\"$1\""
+	else
+		firstArg=$1
+	fi
+
+	# Cheak for 2nd argument as either filter name or RID value; format accordingly
+	if [[ $2 != '' && $3 != '' ]]; then
+		# As filter name
+		secondArg="\"$2\""
+	elif [[ $2 != '' ]]; then
+		# As filter value (i.e. an RID or an array of RIDs)
+		if [[ ${2:0:1} == '[' ]];then
+			secondArg=$2
+		elif [[ ${2:0:1} == '#' || ${2:0:1} =~ ^-?[0-9]+$ ]];then
+			secondArg="[\"$2\"]"
+		elif [[ ${2:0:1} == '{' ]]; then
+			secondArg=$2
+		else
+			secondArg="\"$2\""
+		fi
+	fi
+
+	# Check for 3rd argument as filter value.
+	# If the result of a subquery (i.e. an RID or an array of RIDs), format accordingly
+	if [[ $3 != '' ]]; then
+		if [[ ${3:0:1} == '[' ]];then
+			thirdArg=$3
+		elif [[ ${3:0:1} == '#' || ${3:0:1} =~ ^-?[0-9]+$ ]];then
+			thirdArg="[\"$3\"]"
+		elif [[ ${3:0:1} == '{' ]]; then
+			thirdArg=$3
+		else
+			thirdArg="\"$3\""
+		fi
+	fi
+
+	###
+	# Adding the filters property if needed (for 2nd/3rd pos args) and not already present
+	
+	if [[ $secondArg != '' ]]; then
+		currentFilters=$(echo $formattedData | jq -c .filters)
+		if [[ $currentFilters == 'null' ]]; then
+			formattedData=$(echo $formattedData | jq -c '.filters = ""')
+		fi
+	fi
+
+	###
+	# Incorporating positional arguments
+
+	if [[ $firstArg != '' ]]; then
+		formattedData=$(echo $formattedData | jq -c ".target = $firstArg")
+	fi
+
+	if [[ $secondArg != '' && $thirdArg != '' ]]; then
+		# Pattern for a given target and a key-value filter
+		formattedData=$(echo $formattedData | jq -c ".filters = {$secondArg:$thirdArg}")
+	elif [[ $secondArg != '' ]]; then
+		# Pattern for a given target and an RID filter
+		formattedData=$(echo $formattedData | jq -c ".filters = {\"@rid\":$secondArg}")
+	fi
+
+
+	###
 	# ACTUAL QUERY
 
 	# Setting Auth header
 	printf -v headerAuth 'Authorization: %s' $GKB_TOKEN
+
+	# Removes trailing whitespaces, if any
+	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
 
 	echo $formattedData
 
@@ -508,41 +589,6 @@ gkb_query() {
 gkb_query_preprocessing() {
 
 	###
-	# PROCESSING POSITIONAL ARGUMENTS
-
-	# Check for 1st argument as target value.
-	# If the result of a subquery (e.g. an RID or an array of RIDs) then format accordingly
-	# If an actuel subquery (e.g. an object) then format accordingly
-	if [[ ${1:0:1} == '[' || ${1:0:1} == '{' ]];then
-		firstArg=$1
-	elif [[ ${1:0:1} == '#' || ${1:0:1} =~ ^-?[0-9]+$ ]];then
-		firstArg="[\"$1\"]"
-	else
-		firstArg="\"$1\""
-	fi
-
-	# Cheak for 2nd argument as either filter name or RID value; format accordingly
-	if [[ $2 != '' && $3 != '' ]]; then
-		secondArg=$2 # As filter name
-	elif [[ $2 != '' ]]; then
-		secondArg=$2 # As filter value
-	fi
-
-	# Check for 3rd argument as filter value.
-	# If the result of a subquery (e.g. an RID or an array of RIDs), format accordingly
-	if [[ $3 != '' ]]; then
-		if [[ ${3:0:1} == '[' ]];then
-			thirdArg=$3
-		elif [[ ${3:0:1} == '#' || ${3:0:1} =~ ^-?[0-9]+$ ]];then
-			thirdArg="[\"$3\"]"
-		elif [[ ${3:0:1} == '{' ]]; then
-			thirdArg=$3
-		else
-			thirdArg="\"$3\""
-		fi
-	fi
-
-	###
 	# PROCESSING --body & --file OPTIONS
 
 	if [[ $body != '' ]]; then
@@ -550,24 +596,16 @@ gkb_query_preprocessing() {
 	elif [[ $filepath != '' ]]; then
 		formattedData=`cat $filepath`
 	else
-		formattedData='{"target":""}'
+		formattedData='{}'
 	fi
 
 	###
-	# Incorporating positional arguments
-
-	if [[ $secondArg && $thirdArg ]]; then
-		# Pattern for a given target and a key-value filter
-		printf -v formattedData '{"target":%s,"filters":{"AND":[{"%s":%s}]}}' $firstArg $secondArg $thirdArg
-	elif [[ $secondArg ]]; then
-		# Pattern for a given target and an RID filter
-		printf -v formattedData '{"target":%s,"filters":{"AND":[{"@rid":"%s"}]}}' $firstArg $secondArg
-	else
-		# Pattern for a given target only; no positional filter
-		printf -v formattedData '{"target":%s}' $firstArg
+	# Adding the target property if not already present
+	
+	currentTarget=$(echo $formattedData | jq -c .target)
+	if [[ $currentTarget == 'null' ]]; then
+		formattedData=$(echo $formattedData | jq -c '.target = ""')
 	fi
-	# Removes trailing whitespaces, if any
-	formattedData="$(echo -e "${formattedData}" | sed -e 's/[[:space:]]*$//')"
 
 	###
 	# PROCESSING max, limit & skip QUERY PROPERTIES
@@ -637,6 +675,8 @@ gkb_query_preprocessing() {
 		fi
 
 	done
+
+	echo "{\"metadata\":{\"records\":$totalRecords},\"result\":$results}"
 }
 
 

@@ -46,14 +46,16 @@ Help:
 	-v  --version   Get CLI version
 
 Options:
-	-a, --api <value>       Set API server.
-	                        prod|staging|dev; default to dev
-	-g, --url <value>       Set server URL directly, usually for local deployment
-	                        '--api' option gets ignored.
+	-a, --api <value>  Set API server.
+	                   prod|staging|dev; default to dev
+	-g, --url <value>  Set server URL directly, usually for local deployment
+	                   '--api' option gets ignored.
+	-V, --verbose      Will log connexion infos in console. Not suitable if piping into jq
+
+	Auth. (token automatically refreshed before every request):
 	-p, --password <value>  Set password used for auth, default to env variable \$GKB_PASSWORD
 	-u, --username <value>  Set username used for auth, default to env variable \$GKB_USER
 	                        with fallback to current user id \$(whoami)
-	-V, --verbose           Will log connexion infos in console. Not suitable if piping into jq
 
 Commands:
 	e, extensions <service> <id>  Query external APIs via GraphKB. Auth NEEDED

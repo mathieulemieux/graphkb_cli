@@ -1,4 +1,0 @@
-gkb query \
-    --limit 5 \
-    User | \
-    jq '.result | map({(."@rid"):.name}) | add'

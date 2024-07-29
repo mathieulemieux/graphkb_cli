@@ -48,24 +48,39 @@ DELETE
 GET
 
 	# Get a specific record (active or soft-deleted) on given class & RID.
-	  \$ $GKB_NAME_TO_PATH GET Disease 133:0
+	# Note that result from GET is an object, not a list like with query.
+	  \$ $GKB_NAME_TO_PATH GET Disease 133:0 | jq .result.displayName
 
 	# Extends embedded links (neighbors) to whole records for as many given levels, e.g. 1
-	  \$ $GKB_NAME_TO_PATH GET --neighbors 1 Disease 133:0
+	  \$ $GKB_NAME_TO_PATH GET \\
+	    --neighbors 1 \\
+	    Disease 133:0
 
 PATCH
 
 	# Update a specific active record on given class & RID.
 	# key-value pairs passed in the query's body will be updated.
-	  \$ $GKB_NAME_TO_PATH PATCH --body '{\"comment\":\"new comment\"}' Disease 133:0
+	# Target and RID need to be passed as a positional argument.
+	  \$ $GKB_NAME_TO_PATH PATCH \\
+	    --body '{\"comment\":\"new comment\"}' \\
+	    Disease 133:0
 
-	# As always, can also be done using an external file, e.g. './body.json'
-	  \$ $GKB_NAME_TO_PATH PATCH --file ./body.json Disease 133:0
+	# Query's body can also be passed from a file.
+	  \$ $GKB_NAME_TO_PATH PATCH \\
+	    --file $GKB_WORKDIR/examples/PATCH_Disease.json \\
+	    Disease 133:0
 
 POST
 
-	# Create a new record on a given class. Body's target will be ignored if provided
-	  \$ $GKB_NAME_TO_PATH POST --file '$GKB_WORKDIR/examples/queries/PositionalVariant.json'
+	# Create a new record on a given class. Body's target will be ignored if provided.
+	# Target can be passed as a positional argument...
+	  \$ $GKB_NAME_TO_PATH POST \\
+	    --file $GKB_WORKDIR/examples/POST_Infers.json \\
+	    Infers
+
+	# ...or within the body (e.g. with --file).
+	  \$ $GKB_NAME_TO_PATH POST \\
+	    --file $GKB_WORKDIR/examples/POST_PositionalVariant.json
 	"
 	exit 0
 }
@@ -94,7 +109,7 @@ gkb_crud()
 		data='{}'
 	fi
 
-	# class endpoint
+	# Class endpoint as 1st positional argument
 	if [[ $1 == '' ]]; then
 		gkb_crud_help 1
 	elif [[ $1 == 'E' || $1 == 'e' ]]; then
@@ -107,7 +122,7 @@ gkb_crud()
 		class="${1}s"
 	fi
 
-	# RID formatting
+	# RID as 2nd positional argument
 	rid=$2
 	if [[ ${rid:0:1} == "#" ]]; then
 		rid=${rid:1}
