@@ -4,8 +4,8 @@
 Move to or make a new directory from where you can clone the GraphKB CLI repo.
 ```
 cd ~/bin
-git clone https://svn.bcgsc.ca/bitbucket/scm/dat/graphkb-cli.git gkb
-cd gkb
+git clone https://svn.bcgsc.ca/bitbucket/scm/dat/graphkb-cli.git
+cd graphkb-cli
 ```
 Make gkb accessible in your path.
 ```
